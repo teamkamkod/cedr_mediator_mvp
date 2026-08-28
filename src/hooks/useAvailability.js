@@ -1,0 +1,186 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '../lib/supabase'
+import { differenceInCalendarWeeks, parseISO, getDay, getDate, format } from 'date-fns'
+
+// Resolves slot data for a given date + period
+// Priority: explicit slot > recurring series > not_set
+export function resolveSlot(date, period, slots, series) {
+  const dateStr = format(date, 'yyyy-MM-dd')
+
+  // 1. Explicit slot wins
+  const explicit = slots?.find(s => s.date === dateStr && s.period === period)
+  if (explicit) return { ...explicit, source: 'explicit' }
+
+  // 2. Check recurring series
+  // date-fns getDay: 0=Sun, 1=Mon... we use 0=Mon so adjust
+  const rawDay = getDay(date) // 0=Sun
+  const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1 // convert to 0=Mon
+
+  const matchingSeries = series?.find(s => {
+    if (!s.is_active) return false
+    if (s.day_of_week !== dayOfWeek) return false
+    if (s.period !== period) return false
+    if (dateStr < s.start_date) return false
+    if (s.end_date && dateStr > s.end_date) return false
+    return matchesFrequency(s, date)
+  })
+
+  if (matchingSeries) {
+    return {
+      status: matchingSeries.status,
+      notes: matchingSeries.notes,
+      series_id: matchingSeries.id,
+      is_exception: false,
+      source: 'series',
+    }
+  }
+
+  return { status: 'not_set', source: 'none' }
+}
+
+function matchesFrequency(series, date) {
+  if (series.frequency === 'weekly') return true
+  if (series.frequency === 'biweekly') {
+    const weeks = differenceInCalendarWeeks(date, parseISO(series.start_date), { weekStartsOn: 1 })
+    return weeks % 2 === 0
+  }
+  if (series.frequency === 'monthly') {
+    // Same occurrence of weekday in the month (1st Mon, 2nd Tue etc.)
+    const seriesStart = parseISO(series.start_date)
+    const weekOfMonthStart = Math.ceil(getDate(seriesStart) / 7)
+    const weekOfMonthCurrent = Math.ceil(getDate(date) / 7)
+    return weekOfMonthStart === weekOfMonthCurrent
+  }
+  return true
+}
+
+// Fetch slots for a mediator + date range
+export function useSlots(mediatorId, dateFrom, dateTo) {
+  return useQuery({
+    queryKey: ['slots', mediatorId, dateFrom, dateTo],
+    enabled: !!mediatorId && !!dateFrom && !!dateTo,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('availability_slots')
+        .select('*')
+        .eq('mediator_id', mediatorId)
+        .gte('date', dateFrom)
+        .lte('date', dateTo)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+// Fetch recurring series for a mediator
+export function useRecurringSeries(mediatorId) {
+  return useQuery({
+    queryKey: ['series', mediatorId],
+    enabled: !!mediatorId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('recurring_series')
+        .select('*')
+        .eq('mediator_id', mediatorId)
+        .eq('is_active', true)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+// Fetch provisional bookings needing action
+export function useProvisionalBookings(mediatorId) {
+  return useQuery({
+    queryKey: ['provisional', mediatorId],
+    enabled: !!mediatorId,
+    refetchInterval: 30_000, // poll every 30s
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('availability_slots')
+        .select('*, cases!case_id(*)')
+        .eq('mediator_id', mediatorId)
+        .eq('status', 'provisionally_booked')
+        .order('date', { ascending: true })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+// Upsert a single slot
+export function useUpsertSlot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, date, period, status, notes, seriesId, isException }) => {
+      const { data, error } = await supabase
+        .from('availability_slots')
+        .upsert({
+          mediator_id: mediatorId,
+          date,
+          period,
+          status,
+          notes: notes || null,
+          series_id: seriesId || null,
+          is_exception: isException || false,
+          updated_by: (await supabase.auth.getUser()).data.user?.id,
+        }, { onConflict: 'mediator_id,date,period' })
+        .select()
+        .single()
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+// Confirm or decline a provisional booking
+export function useRespondToBooking() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ slotId, mediatorId, action }) => {
+      const newStatus = action === 'accept' ? 'confirmed' : 'available'
+      const { error } = await supabase
+        .from('availability_slots')
+        .update({ status: newStatus })
+        .eq('id', slotId)
+      if (error) throw error
+
+      // Fire Make webhook (placeholder — configure URL in env)
+      const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
+      if (webhookUrl) {
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slot_id: slotId, mediator_id: mediatorId, action }),
+        }).catch(() => {}) // non-blocking
+      }
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+// Create a recurring series
+export function useCreateSeries() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (seriesData) => {
+      const { data, error } = await supabase
+        .from('recurring_series')
+        .insert(seriesData)
+        .select()
+        .single()
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_, { mediator_id }) => {
+      qc.invalidateQueries({ queryKey: ['series', mediator_id] })
+    },
+  })
+}
