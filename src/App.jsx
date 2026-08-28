@@ -1,11 +1,34 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from './lib/auth'
-import LoginPage from './pages/LoginPage'
-import CalendarPage from './pages/CalendarPage'
-import ProfilePage from './pages/ProfilePage'
-import AdminPage from './pages/AdminPage'
+import { supabase } from './lib/supabase'
+import LoginPage      from './pages/LoginPage'
+import SetPasswordPage from './pages/SetPasswordPage'
+import CalendarPage   from './pages/CalendarPage'
+import ProfilePage    from './pages/ProfilePage'
+import AdminPage      from './pages/AdminPage'
 import MediatorSelectPage from './pages/MediatorSelectPage'
-import AppLayout from './components/layout/AppLayout'
+import AppLayout      from './components/layout/AppLayout'
+
+// Detects invite/recovery tokens in the URL hash and redirects accordingly
+function AuthCallbackHandler() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace('#', ''))
+    const type = hash.get('type')
+
+    if (type === 'invite' || type === 'recovery') {
+      // Supabase client will process the tokens automatically via onAuthStateChange.
+      // We just redirect to the right page — Supabase keeps the session.
+      sessionStorage.setItem('invite_flow', '1')
+      navigate('/set-password', { replace: true })
+    }
+  }, [])
+
+  return null
+}
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { isAuthenticated, loading, isSuperAdmin } = useAuth()
@@ -33,17 +56,19 @@ function LoadingScreen() {
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthCallbackHandler />
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login"        element={<LoginPage />} />
+        <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/" element={
           <ProtectedRoute>
             <AppLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<CalendarPage />} />
+          <Route index                element={<CalendarPage />} />
           <Route path="select-mediator" element={<MediatorSelectPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="admin" element={
+          <Route path="profile"       element={<ProfilePage />} />
+          <Route path="admin"         element={
             <ProtectedRoute adminOnly>
               <AdminPage />
             </ProtectedRoute>
