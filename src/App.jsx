@@ -24,18 +24,13 @@ function AuthCallbackHandler() {
 }
 
 function ProtectedRoute({ children, adminOnly = false }) {
-  const { isAuthenticated, loading, isSuperAdmin, isClerk,
-          needsMediatorSelect, activeMediatorId } = useAuth()
+  const { isAuthenticated, loading, isAdmin, isClerk,
+          needsMediatorSelect } = useAuth()
 
   if (loading) return <LoadingScreen />
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (adminOnly && !isSuperAdmin) return <Navigate to="/" replace />
-
-  // Clerk with multiple mediators and none selected yet → force selection
-  if (isClerk && needsMediatorSelect) {
-    return <Navigate to="/select-mediator" replace />
-  }
-
+  if (adminOnly && !isAdmin) return <Navigate to="/" replace />
+  if (isClerk && needsMediatorSelect) return <Navigate to="/select-mediator" replace />
   return children
 }
 
@@ -45,8 +40,7 @@ function LoadingScreen() {
       <div className="flex flex-col items-center gap-3">
         <img
           src="https://www.cedr.com/hubfs/New_CEDR_2025/Images/CEDR_Logo%20Dark.svg"
-          alt="CEDR"
-          className="h-8 opacity-60"
+          alt="CEDR" className="h-8 opacity-60"
         />
         <div className="w-6 h-6 border-2 border-cedr-navy border-t-transparent rounded-full animate-spin" />
       </div>
@@ -76,7 +70,6 @@ export default function App() {
             </ProtectedRoute>
           } />
         </Route>
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

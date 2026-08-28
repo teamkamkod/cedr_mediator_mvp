@@ -111,6 +111,7 @@ export function useUpsertSlot() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ mediatorId, date, period, status, notes, seriesId, isException }) => {
+      const userId = (await supabase.auth.getUser()).data.user?.id
       const { data, error } = await supabase
         .from('availability_slots')
         .upsert({
@@ -121,12 +122,62 @@ export function useUpsertSlot() {
           notes:        notes || null,
           series_id:    seriesId || null,
           is_exception: isException || false,
-          updated_by:   (await supabase.auth.getUser()).data.user?.id,
+          updated_by:   userId,
+          created_by:   userId,
         }, { onConflict: 'mediator_id,date,period' })
         .select()
         .single()
       if (error) throw error
       return data
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+const MAKE_WEBHOOK = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
+
+// CRA-specific: create a provisional booking with optional email notification
+export function useCreateProvisionalBooking() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, date, period, fullDay, sendEmail, message, hubspotMediatorId }) => {
+      const userId   = (await supabase.auth.getUser()).data.user?.id
+      const periods  = fullDay ? ['morning', 'afternoon'] : [period]
+
+      for (const p of periods) {
+        const { error } = await supabase
+          .from('availability_slots')
+          .upsert({
+            mediator_id:  mediatorId,
+            date,
+            period:       p,
+            status:       'provisionally_booked',
+            notes:        null,
+            series_id:    null,
+            is_exception: false,
+            updated_by:   userId,
+            created_by:   userId,
+          }, { onConflict: 'mediator_id,date,period' })
+        if (error) throw error
+      }
+
+      // Fire Make webhook
+      await fetch(MAKE_WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          event:                      'request_slot_availability',
+          mediator_id:                mediatorId,
+          hubspot_mediator_object_id: hubspotMediatorId || null,
+          slot_date:                  date,
+          slot_period:                fullDay ? 'full_day' : period,
+          send_email:                 sendEmail,
+          message:                    message || null,
+        }),
+      }).catch(() => {}) // non-blocking
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })

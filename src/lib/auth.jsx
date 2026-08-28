@@ -80,31 +80,35 @@ export function AuthProvider({ children }) {
         if (!valid) setActiveMediatorId(null)
       }
 
-    } else if (data.role === 'super_admin') {
-      // When opened from HubSpot CRM card iframe, ?mediator_id=xxx is passed in the URL
-      // This auto-selects the mediator so the CRA sees the right calendar immediately
+    } else if (data.role === 'super_admin' || data.role === 'cra') {
+      // Both super_admin and CRA see all mediators via MediatorPicker
+      // Support ?mediator_id= URL param (HubSpot iframe flow)
       const urlParams   = new URLSearchParams(window.location.search)
       const urlMediator = urlParams.get('mediator_id')
       if (urlMediator) {
         setActiveMediatorId(urlMediator)
       }
-      // Otherwise stays null → MediatorPicker shown
     }
   }
+
+  const role = profile?.role
 
   const value = {
     session,
     profile,
     loading:             session === undefined,
     isAuthenticated:     !!session,
-    isSuperAdmin:        profile?.role === 'super_admin',
-    isMediator:          profile?.role === 'mediator',
-    isClerk:             profile?.role === 'clerk',
+    isSuperAdmin:        role === 'super_admin',
+    isMediator:          role === 'mediator',
+    isClerk:             role === 'clerk',
+    isCRA:               role === 'cra',
+    // Can manage users in Admin page
+    isAdmin:             role === 'super_admin',
     activeMediatorId,
     setActiveMediatorId,
     activeMediatorProfile,
     clerkAssignments,
-    needsMediatorSelect: profile?.role === 'clerk' && clerkAssignments !== null && !activeMediatorId && clerkAssignments.length > 1,
+    needsMediatorSelect: role === 'clerk' && clerkAssignments !== null && !activeMediatorId && clerkAssignments.length > 1,
     refreshProfile: () => session && fetchProfile(session.user.id),
   }
 

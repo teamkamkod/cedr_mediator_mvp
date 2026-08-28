@@ -3,8 +3,10 @@ import { startOfWeek, endOfWeek, eachDayOfInterval, format, isToday } from 'date
 import { clsx } from 'clsx'
 import SlotCell from './SlotCell'
 import SlotPopover from './SlotPopover'
+import CRASlotPopover from './CRASlotPopover'
 import { resolveSlot } from '../../hooks/useAvailability'
 import { SLOT_STATUSES } from '../../lib/constants'
+import { useAuth } from '../../lib/auth'
 
 // Two slots are mergeable when both have the same non-empty status
 function canMerge(am, pm) {
@@ -51,6 +53,7 @@ function MergedSlotCell({ slotData, day, onClick }) {
 
 export default function WeekView({ currentDate, slots, series, mediatorId }) {
   const [popover, setPopover] = useState(null)
+  const { isCRA } = useAuth()
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd   = endOfWeek(currentDate,   { weekStartsOn: 1 })
@@ -114,13 +117,23 @@ export default function WeekView({ currentDate, slots, series, mediatorId }) {
       </div>
 
       {popover && (
-        <SlotPopover
-          slot={popover.slotData}
-          date={popover.date}
-          period={popover.period}
-          mediatorId={mediatorId}
-          onClose={() => setPopover(null)}
-        />
+        isCRA ? (
+          <CRASlotPopover
+            slot={popover.slotData}
+            date={popover.date}
+            period={popover.period}
+            mediatorId={mediatorId}
+            onClose={() => setPopover(null)}
+          />
+        ) : (
+          <SlotPopover
+            slot={popover.slotData}
+            date={popover.date}
+            period={popover.period}
+            mediatorId={mediatorId}
+            onClose={() => setPopover(null)}
+          />
+        )
       )}
     </div>
   )

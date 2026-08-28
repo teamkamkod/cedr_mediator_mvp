@@ -7,9 +7,9 @@ import { clsx } from 'clsx'
 import HelpModal from './HelpModal'
 
 export default function AppLayout() {
-  const { profile, isSuperAdmin, isClerk, isMediator, clerkAssignments,
-          activeMediatorProfile, setActiveMediatorId } = useAuth()
-  const navigate = useNavigate()
+  const { profile, isSuperAdmin, isClerk, isMediator, isCRA, isAdmin,
+          clerkAssignments, activeMediatorProfile, setActiveMediatorId } = useAuth()
+  const navigate  = useNavigate()
   const [showHelp, setShowHelp] = useState(false)
 
   async function handleSignOut() {
@@ -19,10 +19,11 @@ export default function AppLayout() {
 
   function handleSwitchMediator() {
     setActiveMediatorId(null)
-    navigate(isSuperAdmin ? '/' : '/select-mediator', { replace: true })
+    navigate(isSuperAdmin || isCRA ? '/' : '/select-mediator', { replace: true })
   }
 
   const showHelperLink = isMediator || isClerk
+  const showSwitch     = (isSuperAdmin || isCRA) || (clerkAssignments?.length > 1)
 
   return (
     <div className="min-h-screen flex">
@@ -39,7 +40,7 @@ export default function AppLayout() {
         </div>
 
         {/* Active mediator banner */}
-        {(isClerk || isSuperAdmin) && activeMediatorProfile && (
+        {(isClerk || isSuperAdmin || isCRA) && activeMediatorProfile && (
           <div className="px-4 py-3 bg-white/10 border-b border-white/10">
             <p className="text-white/50 text-[10px] uppercase tracking-wide font-medium mb-1">
               Managing calendar for
@@ -51,12 +52,9 @@ export default function AppLayout() {
                   {activeMediatorProfile.full_name}
                 </p>
               </div>
-              {(isSuperAdmin || (clerkAssignments?.length > 1)) && (
-                <button
-                  onClick={handleSwitchMediator}
-                  title="Switch mediator"
-                  className="text-white/50 hover:text-white transition-colors shrink-0"
-                >
+              {showSwitch && (
+                <button onClick={handleSwitchMediator} title="Switch mediator"
+                  className="text-white/50 hover:text-white transition-colors shrink-0">
                   <RefreshCw size={13} />
                 </button>
               )}
@@ -68,18 +66,16 @@ export default function AppLayout() {
         <nav className="flex-1 px-3 py-4 space-y-1">
           <NavItem to="/" icon={<Calendar size={16} />} label="Calendar" end />
           <NavItem to="/profile" icon={<User size={16} />} label="Profile" />
-          {isSuperAdmin && (
+          {isAdmin && (
             <NavItem to="/admin" icon={<Shield size={16} />} label="Admin" />
           )}
         </nav>
 
-        {/* Help link — mediators and clerks only */}
+        {/* Help link */}
         {showHelperLink && (
           <div className="px-4 pb-2">
-            <button
-              onClick={() => setShowHelp(true)}
-              className="flex items-center gap-2 text-white/40 hover:text-white/70 text-sm transition-colors w-full py-1"
-            >
+            <button onClick={() => setShowHelp(true)}
+              className="flex items-center gap-2 text-white/40 hover:text-white/70 text-sm transition-colors w-full py-1">
               <HelpCircle size={14} />
               Help
             </button>
@@ -97,10 +93,8 @@ export default function AppLayout() {
               <p className="text-white/50 text-xs capitalize">{profile?.role}</p>
             </div>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-2 text-white/60 hover:text-white text-sm transition-colors w-full"
-          >
+          <button onClick={handleSignOut}
+            className="flex items-center gap-2 text-white/60 hover:text-white text-sm transition-colors w-full">
             <LogOut size={14} />
             Sign out
           </button>

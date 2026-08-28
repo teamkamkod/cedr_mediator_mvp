@@ -5,8 +5,10 @@ import {
 } from 'date-fns'
 import { clsx } from 'clsx'
 import SlotPopover from './SlotPopover'
+import CRASlotPopover from './CRASlotPopover'
 import { resolveSlot } from '../../hooks/useAvailability'
 import { SLOT_STATUSES } from '../../lib/constants'
+import { useAuth } from '../../lib/auth'
 
 const statusStyles = {
   available:            'bg-green-50 border-green-200 text-green-800',
@@ -63,6 +65,7 @@ function MergedBar({ slot, onClick }) {
 
 export default function MonthView({ currentDate, slots, series, mediatorId }) {
   const [popover, setPopover] = useState(null)
+  const { isCRA } = useAuth()
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd   = endOfMonth(currentDate)
@@ -129,13 +132,23 @@ export default function MonthView({ currentDate, slots, series, mediatorId }) {
       </div>
 
       {popover && (
-        <SlotPopover
-          slot={popover.slotData}
-          date={popover.date}
-          period={popover.period}
-          mediatorId={mediatorId}
-          onClose={() => setPopover(null)}
-        />
+        isCRA ? (
+          <CRASlotPopover
+            slot={popover.slotData}
+            date={popover.date}
+            period={popover.period}
+            mediatorId={mediatorId}
+            onClose={() => setPopover(null)}
+          />
+        ) : (
+          <SlotPopover
+            slot={popover.slotData}
+            date={popover.date}
+            period={popover.period}
+            mediatorId={mediatorId}
+            onClose={() => setPopover(null)}
+          />
+        )
       )}
     </div>
   )
