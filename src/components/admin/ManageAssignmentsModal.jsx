@@ -1,39 +1,44 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 import { useMediators, useClerkAssignments, useSaveAssignments } from '../../hooks/useAssignments'
 import MediatorCheckboxList from './MediatorCheckboxList'
 
 export default function ManageAssignmentsModal({ clerk, onClose }) {
-  const { data: mediators, isLoading: loadingMediators }     = useMediators()
-  const { data: currentIds = [], isLoading: loadingCurrent } = useClerkAssignments(clerk.id)
-  const [selected, setSelected] = useState(null) // null = not initialised yet
-  const save = useSaveAssignments()
-  const [saved, setSaved] = useState(false)
+  const { data: mediators = [],  isLoading: loadingMediators } = useMediators()
+  const { data: currentIds = [], isLoading: loadingCurrent }   = useClerkAssignments(clerk.id)
 
-  // Initialise selection once currentIds loaded
-  if (currentIds.length >= 0 && selected === null) {
-    setSelected([...currentIds])
-  }
+  // selected initialises ONLY once currentIds has finished loading
+  const [selected, setSelected] = useState(null)
+  const [saved, setSaved]       = useState(false)
+  const save = useSaveAssignments()
+
+  useEffect(() => {
+    if (!loadingCurrent) {
+      setSelected([...currentIds])
+    }
+  }, [loadingCurrent, clerk.id]) // re-init if clerk changes or loading finishes
 
   async function handleSave() {
+    if (selected === null) return
     await save.mutateAsync({
-      clerkId:          clerk.id,
-      newMediatorIds:   selected ?? [],
+      clerkId:             clerk.id,
+      newMediatorIds:      selected,
       previousMediatorIds: currentIds,
     })
     setSaved(true)
     setTimeout(onClose, 1200)
   }
 
-  const isLoading = loadingMediators || loadingCurrent || selected === null
-  const hasChanged = JSON.stringify([...(selected ?? [])].sort()) !==
-                     JSON.stringify([...currentIds].sort())
+  const isLoading  = loadingMediators || loadingCurrent || selected === null
+  const hasChanged = selected !== null &&
+    JSON.stringify([...selected].sort()) !== JSON.stringify([...currentIds].sort())
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
         className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-md overflow-hidden">
 
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-cedr-border">
           <div>
             <h2 className="text-base font-semibold text-cedr-navy">Mediator assignments</h2>
@@ -52,23 +57,29 @@ export default function ManageAssignmentsModal({ clerk, onClose }) {
               </div>
               <p className="text-sm font-medium text-cedr-navy">Assignments updated</p>
             </div>
+
           ) : isLoading ? (
             <div className="flex justify-center py-8">
               <div className="w-5 h-5 border-2 border-cedr-navy border-t-transparent rounded-full animate-spin" />
             </div>
+
           ) : (
             <>
               <p className="text-sm text-cedr-muted">
                 Select which mediators this clerk can manage.
-                {selected?.length === 0 && (
-                  <span className="text-amber-600 font-medium"> No mediators assigned — clerk won't be able to access any calendar.</span>
+                {selected.length === 0 && (
+                  <span className="text-amber-600 font-medium">
+                    {' '}No mediators assigned — clerk won't be able to access any calendar.
+                  </span>
                 )}
               </p>
+
               <MediatorCheckboxList
                 mediators={mediators}
-                selected={selected ?? []}
+                selected={selected}
                 onChange={setSelected}
               />
+
               <div className="flex gap-2 pt-1">
                 <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
                 <button

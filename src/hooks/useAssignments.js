@@ -59,9 +59,14 @@ export function useSaveAssignments() {
       }
     },
     onSuccess: (_, { clerkId }) => {
+      // Refresh the assignments modal data
       qc.invalidateQueries({ queryKey: ['admin', 'assignments', clerkId] })
+      // Refresh admin user list (stats)
       qc.invalidateQueries({ queryKey: ['admin', 'users'] })
+      // Refresh clerk's own assignment list used in auth context + sidebar
       qc.invalidateQueries({ queryKey: ['clerks'] })
+      // Refresh mediator list (in case it's displayed somewhere)
+      qc.invalidateQueries({ queryKey: ['admin', 'mediators'] })
     },
   })
 }
