@@ -1,20 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { differenceInCalendarWeeks, parseISO, getDay, getDate, format } from 'date-fns'
+import { differenceInCalendarWeeks, parseISO, getDay, getDate, format, subDays } from 'date-fns'
 
 // Resolves slot data for a given date + period
 // Priority: explicit slot > recurring series > not_set
 export function resolveSlot(date, period, slots, series) {
   const dateStr = format(date, 'yyyy-MM-dd')
 
-  // 1. Explicit slot wins
+  // 1. Explicit slot wins (incl. 'deleted' exceptions which suppress the series)
   const explicit = slots?.find(s => s.date === dateStr && s.period === period)
-  if (explicit) return { ...explicit, source: 'explicit' }
+  if (explicit) {
+    // 'deleted' renders as not_set but keeps source so delete button isn't shown again
+    if (explicit.status === 'deleted') return { ...explicit, status: 'not_set', source: 'explicit_deleted' }
+    return { ...explicit, source: 'explicit' }
+  }
 
   // 2. Check recurring series
-  // date-fns getDay: 0=Sun, 1=Mon... we use 0=Mon so adjust
-  const rawDay = getDay(date) // 0=Sun
-  const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1 // convert to 0=Mon
+  const rawDay    = getDay(date)
+  const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1
 
   const matchingSeries = series?.find(s => {
     if (!s.is_active) return false
@@ -27,11 +30,11 @@ export function resolveSlot(date, period, slots, series) {
 
   if (matchingSeries) {
     return {
-      status: matchingSeries.status,
-      notes: matchingSeries.notes,
-      series_id: matchingSeries.id,
+      status:      matchingSeries.status,
+      notes:       matchingSeries.notes,
+      series_id:   matchingSeries.id,
       is_exception: false,
-      source: 'series',
+      source:      'series',
     }
   }
 
@@ -45,21 +48,19 @@ function matchesFrequency(series, date) {
     return weeks % 2 === 0
   }
   if (series.frequency === 'monthly') {
-    // Same occurrence of weekday in the month (1st Mon, 2nd Tue etc.)
-    const seriesStart = parseISO(series.start_date)
-    const weekOfMonthStart = Math.ceil(getDate(seriesStart) / 7)
+    const seriesStart       = parseISO(series.start_date)
+    const weekOfMonthStart  = Math.ceil(getDate(seriesStart) / 7)
     const weekOfMonthCurrent = Math.ceil(getDate(date) / 7)
     return weekOfMonthStart === weekOfMonthCurrent
   }
   return true
 }
 
-// Fetch slots for a mediator + date range
 export function useSlots(mediatorId, dateFrom, dateTo) {
   return useQuery({
     queryKey: ['slots', mediatorId, dateFrom, dateTo],
-    enabled: !!mediatorId && !!dateFrom && !!dateTo,
-    queryFn: async () => {
+    enabled:  !!mediatorId && !!dateFrom && !!dateTo,
+    queryFn:  async () => {
       const { data, error } = await supabase
         .from('availability_slots')
         .select('*')
@@ -72,12 +73,11 @@ export function useSlots(mediatorId, dateFrom, dateTo) {
   })
 }
 
-// Fetch recurring series for a mediator
 export function useRecurringSeries(mediatorId) {
   return useQuery({
     queryKey: ['series', mediatorId],
-    enabled: !!mediatorId,
-    queryFn: async () => {
+    enabled:  !!mediatorId,
+    queryFn:  async () => {
       const { data, error } = await supabase
         .from('recurring_series')
         .select('*')
@@ -89,13 +89,12 @@ export function useRecurringSeries(mediatorId) {
   })
 }
 
-// Fetch provisional bookings needing action
 export function useProvisionalBookings(mediatorId) {
   return useQuery({
-    queryKey: ['provisional', mediatorId],
-    enabled: !!mediatorId,
-    refetchInterval: 30_000, // poll every 30s
-    queryFn: async () => {
+    queryKey:        ['provisional', mediatorId],
+    enabled:         !!mediatorId,
+    refetchInterval: 30_000,
+    queryFn:         async () => {
       const { data, error } = await supabase
         .from('availability_slots')
         .select('*, cases!case_id(*)')
@@ -108,7 +107,6 @@ export function useProvisionalBookings(mediatorId) {
   })
 }
 
-// Upsert a single slot
 export function useUpsertSlot() {
   const qc = useQueryClient()
   return useMutation({
@@ -116,14 +114,14 @@ export function useUpsertSlot() {
       const { data, error } = await supabase
         .from('availability_slots')
         .upsert({
-          mediator_id: mediatorId,
+          mediator_id:  mediatorId,
           date,
           period,
           status,
-          notes: notes || null,
-          series_id: seriesId || null,
+          notes:        notes || null,
+          series_id:    seriesId || null,
           is_exception: isException || false,
-          updated_by: (await supabase.auth.getUser()).data.user?.id,
+          updated_by:   (await supabase.auth.getUser()).data.user?.id,
         }, { onConflict: 'mediator_id,date,period' })
         .select()
         .single()
@@ -131,13 +129,72 @@ export function useUpsertSlot() {
       return data
     },
     onSuccess: (_, { mediatorId }) => {
-      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
       qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
     },
   })
 }
 
-// Confirm or decline a provisional booking
+// Delete an explicit slot entirely
+export function useDeleteSlot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ slotId, mediatorId }) => {
+      const { error } = await supabase
+        .from('availability_slots')
+        .delete()
+        .eq('id', slotId)
+      if (error) throw error
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+// Mark a single occurrence of a series as deleted (inserts a 'deleted' exception)
+export function useDeleteSeriesException() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, date, period, seriesId }) => {
+      const { error } = await supabase
+        .from('availability_slots')
+        .upsert({
+          mediator_id:  mediatorId,
+          date,
+          period,
+          status:       'deleted',
+          series_id:    seriesId,
+          is_exception: true,
+        }, { onConflict: 'mediator_id,date,period' })
+      if (error) throw error
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
+    },
+  })
+}
+
+// Deactivate all series occurrences from a given date onwards (sets end_date = date - 1)
+export function useDeactivateSeriesFrom() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ seriesId, mediatorId, fromDate }) => {
+      const endDate = format(subDays(parseISO(fromDate), 1), 'yyyy-MM-dd')
+      const { error } = await supabase
+        .from('recurring_series')
+        .update({ end_date: endDate })
+        .eq('id', seriesId)
+      if (error) throw error
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['series', mediatorId] })
+      qc.invalidateQueries({ queryKey: ['slots',  mediatorId] })
+    },
+  })
+}
+
 export function useRespondToBooking() {
   const qc = useQueryClient()
   return useMutation({
@@ -149,24 +206,22 @@ export function useRespondToBooking() {
         .eq('id', slotId)
       if (error) throw error
 
-      // Fire Make webhook (placeholder — configure URL in env)
       const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
       if (webhookUrl) {
         await fetch(webhookUrl, {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slot_id: slotId, mediator_id: mediatorId, action }),
-        }).catch(() => {}) // non-blocking
+          body:    JSON.stringify({ slot_id: slotId, mediator_id: mediatorId, action }),
+        }).catch(() => {})
       }
     },
     onSuccess: (_, { mediatorId }) => {
-      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
       qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
     },
   })
 }
 
-// Create a recurring series
 export function useCreateSeries() {
   const qc = useQueryClient()
   return useMutation({
