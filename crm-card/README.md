@@ -1,56 +1,42 @@
 # CEDR Mediator Calendar — HubSpot CRM Card
 
-App card displayed on the **Mediator custom object** record in HubSpot.
-Shows the mediator's availability for the current week with week navigation.
+App card on the **Mediator custom object** (`p_mediators`) in HubSpot.
+Shows mediator availability (week view) pulled live from Supabase.
 
-## Prerequisites
+## What's already done
 
-- HubSpot CLI: `npm install -g @hubspot/cli`
-- Access to CEDR's HubSpot portal
-- Supabase project URL and service role key
+- ✅ Object type set: `p_mediators` (fullyQualifiedName: `p5956807_mediators`)
+- ✅ James Anderson linked: `hubspot_mediator_object_id = 447896233207`
+- ✅ Sarah Collins linked:  `hubspot_mediator_object_id = 447895513329`
+- ✅ Make webhook URL hardcoded in the card
 
-## Setup
+## Deploy checklist
 
-### 1. Authenticate HubSpot CLI
+### 1. Install HubSpot CLI (if not already)
+
+```bash
+npm install -g @hubspot/cli
+```
+
+### 2. Authenticate
 
 ```bash
 hs auth
-# Select CEDR's portal when prompted
+# Select CEDR's portal (or your dev portal)
 ```
 
-### 2. Find the Mediator custom object name
+### 3. Add Supabase secrets
 
-```bash
-# GET request to find fullyQualifiedName
-curl -H "Authorization: Bearer <PRIVATE_APP_TOKEN>" \
-  "https://api.hubapi.com/crm/v3/schemas"
-```
-
-Look for the mediator object → grab `fullyQualifiedName` (e.g. `p123456_Mediator`) → remove the HubID → use `p_Mediator`.
-
-Update `src/app/extensions/mediator-calendar.json` if the name differs:
-```json
-"objectTypes": [{ "name": "p_YourObjectName" }]
-```
-
-### 3. Add secrets to HubSpot
-
-In the HubSpot private app settings, add these secrets:
-
-| Secret name | Value |
-|---|---|
-| `SUPABASE_URL` | `https://kvmvgezohrrrutkxhzit.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | `<service_role_key from Supabase dashboard>` |
-| `MAKE_REQUEST_UPDATE_WEBHOOK` | `<Make webhook URL>` (optional for MVP) |
-
-Or via CLI:
 ```bash
 hs secret add SUPABASE_URL
+# → paste: https://kvmvgezohrrrutkxhzit.supabase.co
+
 hs secret add SUPABASE_SERVICE_ROLE_KEY
-hs secret add MAKE_REQUEST_UPDATE_WEBHOOK
+# → paste: the service_role key from:
+#   Supabase dashboard → Project Settings → API → service_role (long eyJ... key)
 ```
 
-### 4. Deploy
+### 4. Upload the project
 
 ```bash
 cd crm-card
@@ -59,28 +45,31 @@ hs project upload
 
 ### 5. Add the card to the Mediator record layout
 
-In HubSpot: **Settings → Objects → [Mediator object] → Record customization → Add card**
-→ Select "CEDR Mediator Calendar"
+HubSpot → **Settings → Objects → Mediators → Record customization**
+→ **Add card** → select **"CEDR Mediator Calendar"**
 
-## Linking mediators
+### 6. Test
 
-For the card to work, each Supabase user must have `hubspot_mediator_object_id` populated
-with the HubSpot record ID of their mediator object record.
+Open any mediator record in HubSpot → the card should appear showing
+the current week's availability grid.
 
-Update via Supabase SQL editor:
-```sql
-UPDATE users
-SET hubspot_mediator_object_id = '<hs_record_id>'
-WHERE email = 'mediator@example.com';
-```
-
-Or automate via Make.com when a new mediator is created in HubSpot.
-
-## Development (local testing)
+## Local dev
 
 ```bash
 cd crm-card
 hs project dev
+# Opens local dev server — test in a real HubSpot record
 ```
 
-This opens a local dev server. You can test the card in a real HubSpot record.
+## Linking new mediators
+
+When a new mediator is created in the portal, update Supabase:
+
+```sql
+UPDATE public.users
+SET hubspot_mediator_object_id = '<hs_record_id>'
+WHERE email = 'mediator@example.com';
+```
+
+The `hs_record_id` is the mediator custom object record ID in HubSpot
+(visible in the URL when viewing the record: `.../objects/p5956807_mediators/<id>`).

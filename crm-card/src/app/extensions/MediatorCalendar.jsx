@@ -168,7 +168,7 @@ function MediatorCalendar({ context, runServerlessFunction, actions }) {
 
   async function handleRequestUpdate() {
     setRequesting(true)
-    const webhookUrl = process.env.MAKE_REQUEST_UPDATE_WEBHOOK
+    const webhookUrl = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
     if (webhookUrl) {
       try {
         await fetch(webhookUrl, {
