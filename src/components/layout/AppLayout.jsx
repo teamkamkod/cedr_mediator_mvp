@@ -16,7 +16,9 @@ export default function AppLayout() {
 
   function handleSwitchMediator() {
     setActiveMediatorId(null)
-    navigate('/select-mediator', { replace: true })
+    // Super admin → MediatorPicker is inline on the calendar page
+    // Clerk → dedicated select-mediator page
+    navigate(isSuperAdmin ? '/' : '/select-mediator', { replace: true })
   }
 
   return (
