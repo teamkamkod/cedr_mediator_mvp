@@ -35,8 +35,8 @@ export default function AppLayout() {
           </p>
         </div>
 
-        {/* Active mediator banner — shown to clerks */}
-        {isClerk && activeMediatorProfile && (
+        {/* Active mediator banner — shown to clerks and super_admin when a mediator is selected */}
+        {(isClerk || isSuperAdmin) && activeMediatorProfile && (
           <div className="px-4 py-3 bg-white/10 border-b border-white/10">
             <p className="text-white/50 text-[10px] uppercase tracking-wide font-medium mb-1">
               Managing calendar for
@@ -48,7 +48,8 @@ export default function AppLayout() {
                   {activeMediatorProfile.full_name}
                 </p>
               </div>
-              {clerkAssignments?.length > 1 && (
+              {/* Clerks: show if multiple assignments. Super admin: always show */}
+              {(isSuperAdmin || (clerkAssignments?.length > 1)) && (
                 <button
                   onClick={handleSwitchMediator}
                   title="Switch mediator"
