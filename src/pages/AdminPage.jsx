@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UserPlus, Calendar, ShieldOff, ShieldCheck, Search } from 'lucide-react'
+import { UserPlus, Calendar, ShieldOff, ShieldCheck, Search, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAllUsers, useToggleUserActive } from '../hooks/useAdmin'
 import { useAuth } from '../lib/auth'
 import { Avatar } from '../components/layout/AppLayout'
-import InviteUserModal from '../components/admin/InviteUserModal'
+import InviteUserModal        from '../components/admin/InviteUserModal'
+import ManageAssignmentsModal from '../components/admin/ManageAssignmentsModal'
 
-const ROLE_TABS = ['all', 'mediator', 'clerk', 'super_admin']
+const ROLE_TABS   = ['all', 'mediator', 'clerk', 'super_admin']
 const ROLE_LABELS = { mediator: 'Mediator', clerk: 'Clerk', super_admin: 'Admin', all: 'All users' }
 const ROLE_COLORS = {
   mediator:    'bg-blue-100 text-blue-700',
@@ -17,13 +18,14 @@ const ROLE_COLORS = {
 
 export default function AdminPage() {
   const { data: users, isLoading } = useAllUsers()
-  const toggle    = useToggleUserActive()
+  const toggle   = useToggleUserActive()
   const { setActiveMediatorId } = useAuth()
-  const navigate  = useNavigate()
+  const navigate = useNavigate()
 
-  const [tab, setTab]           = useState('all')
-  const [search, setSearch]     = useState('')
-  const [showModal, setShowModal] = useState(false)
+  const [tab, setTab]               = useState('all')
+  const [search, setSearch]         = useState('')
+  const [showInvite, setShowInvite] = useState(false)
+  const [assignClerk, setAssignClerk] = useState(null) // clerk user object
 
   const filtered = users?.filter(u => {
     const matchTab    = tab === 'all' || u.role === tab
@@ -34,7 +36,7 @@ export default function AdminPage() {
   }) ?? []
 
   const stats = {
-    total:    users?.length ?? 0,
+    total:     users?.length ?? 0,
     mediators: users?.filter(u => u.role === 'mediator').length ?? 0,
     clerks:    users?.filter(u => u.role === 'clerk').length ?? 0,
     active:    users?.filter(u => u.is_active).length ?? 0,
@@ -58,7 +60,7 @@ export default function AdminPage() {
           <h1 className="text-xl font-semibold text-cedr-navy">Admin</h1>
           <p className="text-cedr-muted text-sm mt-0.5">Manage users, roles and calendar access</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => setShowInvite(true)} className="btn-primary flex items-center gap-2">
           <UserPlus size={15} />
           Invite user
         </button>
@@ -67,7 +69,7 @@ export default function AdminPage() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Total users',  value: stats.total },
+          { label: 'Total users', value: stats.total },
           { label: 'Mediators',   value: stats.mediators },
           { label: 'Clerks',      value: stats.clerks },
           { label: 'Active',      value: stats.active },
@@ -83,27 +85,19 @@ export default function AdminPage() {
       <div className="flex items-center justify-between gap-4 mb-4">
         <div className="flex gap-1 bg-cedr-light rounded p-1">
           {ROLE_TABS.map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
+            <button key={t} onClick={() => setTab(t)}
               className={clsx(
                 'px-3 py-1 rounded text-sm font-medium capitalize transition-colors',
                 tab === t ? 'bg-white text-cedr-navy shadow-card' : 'text-cedr-muted hover:text-cedr-text'
-              )}
-            >
+              )}>
               {ROLE_LABELS[t]}
             </button>
           ))}
         </div>
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-cedr-muted" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search name or email…"
-            className="input pl-8 text-sm w-64"
-          />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search name or email…" className="input pl-8 text-sm w-64" />
         </div>
       </div>
 
@@ -149,29 +143,33 @@ export default function AdminPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      {/* View calendar — mediators only */}
                       {user.role === 'mediator' && user.is_active && (
-                        <button
-                          onClick={() => handleViewCalendar(user.id)}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-cedr-navy hover:bg-cedr-light border border-cedr-border transition-colors"
-                        >
+                        <button onClick={() => handleViewCalendar(user.id)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-cedr-navy hover:bg-cedr-light border border-cedr-border transition-colors">
                           <Calendar size={12} />
-                          View calendar
+                          Calendar
                         </button>
                       )}
-                      <button
-                        onClick={() => handleToggle(user)}
-                        disabled={toggle.isPending}
+                      {/* Manage assignments — clerks only */}
+                      {user.role === 'clerk' && (
+                        <button onClick={() => setAssignClerk(user)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-cedr-navy hover:bg-cedr-light border border-cedr-border transition-colors">
+                          <Users size={12} />
+                          Assignments
+                        </button>
+                      )}
+                      {/* Deactivate / Reactivate */}
+                      <button onClick={() => handleToggle(user)} disabled={toggle.isPending}
                         className={clsx(
                           'flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border transition-colors',
                           user.is_active
                             ? 'text-red-600 hover:bg-red-50 border-transparent hover:border-red-200'
                             : 'text-green-700 hover:bg-green-50 border-transparent hover:border-green-200'
-                        )}
-                      >
+                        )}>
                         {user.is_active
                           ? <><ShieldOff size={12} /> Deactivate</>
-                          : <><ShieldCheck size={12} /> Reactivate</>
-                        }
+                          : <><ShieldCheck size={12} /> Reactivate</>}
                       </button>
                     </div>
                   </td>
@@ -182,7 +180,8 @@ export default function AdminPage() {
         )}
       </div>
 
-      {showModal && <InviteUserModal onClose={() => setShowModal(false)} />}
+      {showInvite && <InviteUserModal onClose={() => setShowInvite(false)} />}
+      {assignClerk && <ManageAssignmentsModal clerk={assignClerk} onClose={() => setAssignClerk(null)} />}
     </div>
   )
 }
