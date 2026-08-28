@@ -28,6 +28,11 @@ export function AuthProvider({ children }) {
       .select('*')
       .eq('id', userId)
       .single()
+    // Sign out revoked users immediately
+    if (data && data.is_active === false) {
+      await supabase.auth.signOut()
+      return
+    }
     setProfile(data)
   }
 

@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 
-// Update profile fields (first_name, last_name, avatar_url)
 export function useUpdateProfile() {
   const qc = useQueryClient()
   return useMutation({
@@ -15,32 +14,22 @@ export function useUpdateProfile() {
       if (error) throw error
       return data
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['profile'] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profile'] }),
   })
 }
 
-// Upload avatar to Supabase Storage and update user record
 export function useUploadAvatar() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ userId, file }) => {
       const ext  = file.name.split('.').pop()
       const path = `${userId}/avatar.${ext}`
-
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(path, file, { upsert: true, contentType: file.type })
       if (uploadError) throw uploadError
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(path)
-
-      // Add cache-busting param so browser reloads the new image
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
       const avatarUrl = `${publicUrl}?t=${Date.now()}`
-
       const { data, error } = await supabase
         .from('users')
         .update({ avatar_url: avatarUrl })
@@ -50,13 +39,10 @@ export function useUploadAvatar() {
       if (error) throw error
       return data
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['profile'] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profile'] }),
   })
 }
 
-// Change password
 export function useChangePassword() {
   return useMutation({
     mutationFn: async ({ newPassword }) => {
@@ -66,7 +52,7 @@ export function useChangePassword() {
   })
 }
 
-// Fetch clerks assigned to a mediator
+// Fetch clerks assigned to a mediator (includes revoked ones so we can show status)
 export function useMediatorClerks(mediatorId) {
   return useQuery({
     queryKey: ['clerks', mediatorId],
@@ -74,7 +60,7 @@ export function useMediatorClerks(mediatorId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('mediator_clerk_assignments')
-        .select('*, clerk:clerk_id(id, email, full_name, avatar_url, is_active)')
+        .select('*, clerk:clerk_id(id, email, full_name, avatar_url, first_name, last_name, is_active)')
         .eq('mediator_id', mediatorId)
       if (error) throw error
       return data
@@ -82,40 +68,33 @@ export function useMediatorClerks(mediatorId) {
   })
 }
 
-// Add a clerk by email (user must already exist)
-export function useAddClerk() {
+// Invite a new clerk — calls the Edge Function which handles auth user creation
+export function useInviteClerk() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ mediatorId, email }) => {
-      // 1. Look up the clerk user by email
-      const { data: clerkUser, error: lookupError } = await supabase
-        .from('users')
-        .select('id, role, is_active')
-        .eq('email', email.toLowerCase().trim())
-        .single()
-
-      if (lookupError || !clerkUser) {
-        throw new Error('no_account')
+    mutationFn: async ({ mediatorId, firstName, lastName, email }) => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-clerk`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            mediator_id: mediatorId,
+            first_name:  firstName,
+            last_name:   lastName,
+            email,
+          }),
+        }
+      )
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        throw new Error(json.error || 'Failed to invite clerk')
       }
-      if (!clerkUser.is_active) {
-        throw new Error('inactive')
-      }
-      if (clerkUser.role !== 'clerk') {
-        throw new Error('not_clerk')
-      }
-
-      // 2. Create the assignment
-      const { data, error } = await supabase
-        .from('mediator_clerk_assignments')
-        .insert({ mediator_id: mediatorId, clerk_id: clerkUser.id })
-        .select('*, clerk:clerk_id(id, email, full_name, avatar_url)')
-        .single()
-
-      if (error) {
-        if (error.code === '23505') throw new Error('already_assigned')
-        throw error
-      }
-      return data
+      return json
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['clerks', mediatorId] })
@@ -123,16 +102,12 @@ export function useAddClerk() {
   })
 }
 
-// Remove a clerk assignment
-export function useRemoveClerk() {
+// Revoke a clerk — calls Postgres RPC which deactivates the user
+export function useRevokeClerk() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ mediatorId, clerkId }) => {
-      const { error } = await supabase
-        .from('mediator_clerk_assignments')
-        .delete()
-        .eq('mediator_id', mediatorId)
-        .eq('clerk_id', clerkId)
+      const { error } = await supabase.rpc('revoke_clerk', { p_clerk_id: clerkId })
       if (error) throw error
     },
     onSuccess: (_, { mediatorId }) => {
