@@ -1,16 +1,22 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Calendar, User, Shield, LogOut, ChevronDown } from 'lucide-react'
+import { Calendar, User, Shield, LogOut, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { clsx } from 'clsx'
 
 export default function AppLayout() {
-  const { profile, isSuperAdmin } = useAuth()
+  const { profile, isSuperAdmin, isClerk, clerkAssignments,
+          activeMediatorProfile, setActiveMediatorId } = useAuth()
   const navigate = useNavigate()
 
   async function handleSignOut() {
     await supabase.auth.signOut()
     navigate('/login')
+  }
+
+  function handleSwitchMediator() {
+    setActiveMediatorId(null)
+    navigate('/select-mediator', { replace: true })
   }
 
   return (
@@ -28,6 +34,32 @@ export default function AppLayout() {
             Mediator Portal
           </p>
         </div>
+
+        {/* Active mediator banner — shown to clerks */}
+        {isClerk && activeMediatorProfile && (
+          <div className="px-4 py-3 bg-white/10 border-b border-white/10">
+            <p className="text-white/50 text-[10px] uppercase tracking-wide font-medium mb-1">
+              Managing calendar for
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Avatar profile={activeMediatorProfile} size="sm" />
+                <p className="text-white text-sm font-medium truncate">
+                  {activeMediatorProfile.full_name}
+                </p>
+              </div>
+              {clerkAssignments?.length > 1 && (
+                <button
+                  onClick={handleSwitchMediator}
+                  title="Switch mediator"
+                  className="text-white/50 hover:text-white transition-colors shrink-0"
+                >
+                  <RefreshCw size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
@@ -100,7 +132,7 @@ export function Avatar({ profile, size = 'md' }) {
   }
   const initials = [profile?.first_name?.[0], profile?.last_name?.[0]].filter(Boolean).join('') || '?'
   return (
-    <div className={clsx('rounded-full bg-cedr-teal flex items-center justify-center text-white font-semibold', sizes[size])}>
+    <div className={clsx('rounded-full bg-cedr-teal flex items-center justify-center text-white font-semibold shrink-0', sizes[size])}>
       {initials}
     </div>
   )

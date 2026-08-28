@@ -2,18 +2,19 @@ import { useState } from 'react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays } from 'date-fns'
 import { useAuth } from '../lib/auth'
 import { useSlots, useRecurringSeries, useProvisionalBookings } from '../hooks/useAvailability'
-import CalendarHeader from '../components/calendar/CalendarHeader'
-import WeekView from '../components/calendar/WeekView'
-import MonthView from '../components/calendar/MonthView'
+import CalendarHeader    from '../components/calendar/CalendarHeader'
+import WeekView          from '../components/calendar/WeekView'
+import MonthView         from '../components/calendar/MonthView'
 import ProvisionalBanner from '../components/calendar/ProvisionalBanner'
 import { SLOT_STATUSES } from '../lib/constants'
 
 export default function CalendarPage() {
-  const { profile } = useAuth()
+  const { activeMediatorId, activeMediatorProfile, isClerk } = useAuth()
   const [view, setView]               = useState('week')
   const [currentDate, setCurrentDate] = useState(new Date())
 
-  const mediatorId = profile?.id
+  // Always use activeMediatorId — works for mediators (own id) and clerks (selected mediator)
+  const mediatorId = activeMediatorId
 
   const dateFrom = format(
     view === 'week'
@@ -33,6 +34,14 @@ export default function CalendarPage() {
   const { data: provisional }                       = useProvisionalBookings(mediatorId)
 
   const isLoading = slotsLoading || seriesLoading
+
+  if (!mediatorId) {
+    return (
+      <div className="flex-1 flex items-center justify-center h-screen text-cedr-muted text-sm">
+        No mediator selected.
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-screen">
