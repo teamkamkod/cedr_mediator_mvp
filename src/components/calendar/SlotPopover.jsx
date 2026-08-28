@@ -1,26 +1,25 @@
 import { useState, useRef, useEffect } from 'react'
-import { format, parseISO, getDay } from 'date-fns'
-import { X, Repeat, RotateCcw } from 'lucide-react'
+import { format, getDay } from 'date-fns'
+import { X, Repeat } from 'lucide-react'
 import { clsx } from 'clsx'
-import { SLOT_STATUSES, EDITABLE_STATUSES, RECURRENCE_FREQUENCIES, DAYS_OF_WEEK } from '../../lib/constants'
+import { SLOT_STATUSES, EDITABLE_STATUSES, RECURRENCE_FREQUENCIES } from '../../lib/constants'
 import { useUpsertSlot, useCreateSeries } from '../../hooks/useAvailability'
 
 export default function SlotPopover({ slot, date, period, mediatorId, onClose }) {
-  const [status, setStatus]   = useState(slot?.status || 'not_set')
-  const [notes, setNotes]     = useState(slot?.notes || '')
-  const [mode, setMode]       = useState('one_time') // 'one_time' | 'recurring'
-  const [frequency, setFreq]  = useState('weekly')
-  const [endDate, setEndDate] = useState('')
-  const [applyTo, setApplyTo] = useState('this') // 'this' | 'all' — shown when editing series slot
+  const [status, setStatus]       = useState(slot?.status || 'not_set')
+  const [notes, setNotes]         = useState(slot?.notes || '')
+  const [mode, setMode]           = useState('one_time') // 'one_time' | 'recurring'
+  const [frequency, setFreq]      = useState('weekly')
+  const [endDate, setEndDate]     = useState('')
+  const [confirmSeries, setConfirmSeries] = useState(false) // step 2 for series slots
 
   const isFromSeries = slot?.source === 'series'
-  const isBooked = ['provisionally_booked', 'confirmed'].includes(slot?.status)
+  const isBooked     = ['provisionally_booked', 'confirmed'].includes(slot?.status)
 
-  const upsert     = useUpsertSlot()
+  const upsert       = useUpsertSlot()
   const createSeries = useCreateSeries()
-  const ref = useRef()
+  const ref          = useRef()
 
-  // Close on outside click
   useEffect(() => {
     function handle(e) {
       if (ref.current && !ref.current.contains(e.target)) onClose()
@@ -32,9 +31,14 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
   async function handleSave() {
     if (isBooked) return onClose()
 
+    // Series slot → show confirmation step first
+    if (isFromSeries && !confirmSeries) {
+      setConfirmSeries(true)
+      return
+    }
+
     if (mode === 'recurring' && !isFromSeries) {
-      // Create recurring series
-      const rawDay = getDay(date)
+      const rawDay   = getDay(date)
       const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1
       await createSeries.mutateAsync({
         mediator_id: mediatorId,
@@ -46,20 +50,42 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
         end_date: endDate || null,
         notes: notes || null,
       })
-    } else if (isFromSeries && applyTo === 'all') {
-      // Update all — upsert the series via direct supabase call
-      // For MVP: just upsert this slot as exception + mark
+    } else {
       await upsert.mutateAsync({
-        mediatorId, date: format(date, 'yyyy-MM-dd'), period,
-        status, notes, seriesId: slot.series_id, isException: true,
+        mediatorId,
+        date:        format(date, 'yyyy-MM-dd'),
+        period,
+        status,
+        notes,
+        seriesId:    isFromSeries ? slot.series_id : null,
+        isException: isFromSeries,
+      })
+    }
+    onClose()
+  }
+
+  async function handleSeriesConfirm(scope) {
+    // scope: 'this' | 'all'
+    if (scope === 'this') {
+      await upsert.mutateAsync({
+        mediatorId,
+        date:        format(date, 'yyyy-MM-dd'),
+        period,
+        status,
+        notes,
+        seriesId:    slot.series_id,
+        isException: true,
       })
     } else {
-      // Single slot upsert
+      // Update all: upsert explicit + ideally patch the series — for MVP upsert as exception
       await upsert.mutateAsync({
-        mediatorId, date: format(date, 'yyyy-MM-dd'), period,
-        status, notes,
-        seriesId: isFromSeries && applyTo === 'this' ? slot.series_id : null,
-        isException: isFromSeries && applyTo === 'this',
+        mediatorId,
+        date:        format(date, 'yyyy-MM-dd'),
+        period,
+        status,
+        notes,
+        seriesId:    slot.series_id,
+        isException: false,
       })
     }
     onClose()
@@ -87,37 +113,68 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Booked slot — read only */}
-          {isBooked ? (
-            <div className="space-y-2">
-              <div className={clsx('status-badge border', SLOT_STATUSES[slot.status]?.color)}>
-                {SLOT_STATUSES[slot.status]?.label}
-              </div>
-              {slot.cases && (
-                <div className="bg-cedr-light rounded p-3 text-xs space-y-1">
-                  <p className="font-semibold text-cedr-navy">{slot.cases.case_name || `Case #${slot.cases.hubspot_deal_id}`}</p>
-                  {slot.cases.raw_hs_data?.venue && <p className="text-cedr-muted">📍 {slot.cases.raw_hs_data.venue}</p>}
-                  {slot.cases.raw_hs_data?.parties && <p className="text-cedr-muted">👥 {slot.cases.raw_hs_data.parties} parties</p>}
-                </div>
-              )}
-              {slot.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
+        {/* ── Step 2: Series confirmation ── */}
+        {confirmSeries ? (
+          <div className="p-5 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-cedr-navy">
+              <Repeat size={15} className="text-amber-600" />
+              This is a recurring slot
             </div>
-          ) : (
-            <>
-              {/* Series notice */}
+            <p className="text-xs text-cedr-muted leading-relaxed">
+              Do you want to apply this change only to <strong>{format(date, 'EEE d MMM')}</strong>,
+              or to all future occurrences of this recurring slot?
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleSeriesConfirm('this')}
+                disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors"
+              >
+                <p className="text-sm font-medium text-cedr-text">This slot only</p>
+                <p className="text-xs text-cedr-muted mt-0.5">Only {format(date, 'EEE d MMM')} will be updated</p>
+              </button>
+              <button
+                onClick={() => handleSeriesConfirm('all')}
+                disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors"
+              >
+                <p className="text-sm font-medium text-cedr-text">All future slots</p>
+                <p className="text-xs text-cedr-muted mt-0.5">All upcoming occurrences will be updated</p>
+              </button>
+            </div>
+            <button
+              onClick={() => setConfirmSeries(false)}
+              className="text-xs text-cedr-muted hover:text-cedr-text transition-colors w-full text-center"
+            >
+              ← Back
+            </button>
+          </div>
+
+        /* ── Step 1: Main edit view ── */
+        ) : isBooked ? (
+          <div className="p-4 space-y-3">
+            <div className={clsx('status-badge border', SLOT_STATUSES[slot.status]?.color)}>
+              {SLOT_STATUSES[slot.status]?.label}
+            </div>
+            {slot.cases && (
+              <div className="bg-cedr-light rounded p-3 text-xs space-y-1">
+                <p className="font-semibold text-cedr-navy">
+                  {slot.cases.case_name || `Case #${slot.cases.hubspot_deal_id}`}
+                </p>
+                {slot.cases.raw_hs_data?.venue    && <p className="text-cedr-muted">📍 {slot.cases.raw_hs_data.venue}</p>}
+                {slot.cases.raw_hs_data?.parties  && <p className="text-cedr-muted">👥 {slot.cases.raw_hs_data.parties} parties</p>}
+              </div>
+            )}
+            {slot.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
+          </div>
+        ) : (
+          <>
+            <div className="p-4 space-y-4">
+              {/* Series badge — info only, no selector */}
               {isFromSeries && (
                 <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                   <Repeat size={12} />
-                  <span>Recurring slot — apply change to:</span>
-                  <select
-                    value={applyTo}
-                    onChange={e => setApplyTo(e.target.value)}
-                    className="ml-auto text-xs border-0 bg-transparent font-medium"
-                  >
-                    <option value="this">This slot only</option>
-                    <option value="all">All future slots</option>
-                  </select>
+                  Recurring slot — you'll choose the scope on save
                 </div>
               )}
 
@@ -175,52 +232,37 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
                       </button>
                     ))}
                   </div>
-
                   {mode === 'recurring' && (
                     <div className="mt-3 space-y-2">
                       <div>
                         <p className="text-xs text-cedr-muted mb-1">Frequency</p>
-                        <select
-                          value={frequency}
-                          onChange={e => setFreq(e.target.value)}
-                          className="input text-xs"
-                        >
+                        <select value={frequency} onChange={e => setFreq(e.target.value)} className="input text-xs">
                           {RECURRENCE_FREQUENCIES.map(f => (
                             <option key={f.value} value={f.value}>{f.label}</option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <p className="text-xs text-cedr-muted mb-1">End date <span className="text-cedr-muted/60">(optional)</span></p>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={e => setEndDate(e.target.value)}
-                          className="input text-xs"
-                        />
+                        <p className="text-xs text-cedr-muted mb-1">End date <span className="opacity-60">(optional)</span></p>
+                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="input text-xs" />
                       </div>
                     </div>
                   )}
                 </div>
               )}
-            </>
-          )}
-        </div>
+            </div>
 
-        {/* Footer */}
-        {!isBooked && (
-          <div className="flex gap-2 px-4 pb-4">
-            <button onClick={onClose} className="btn-secondary flex-1 text-xs">
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || status === 'not_set'}
-              className="btn-primary flex-1 text-xs"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
+            <div className="flex gap-2 px-4 pb-4">
+              <button onClick={onClose} className="btn-secondary flex-1 text-xs">Cancel</button>
+              <button
+                onClick={handleSave}
+                disabled={saving || status === 'not_set'}
+                className="btn-primary flex-1 text-xs"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
