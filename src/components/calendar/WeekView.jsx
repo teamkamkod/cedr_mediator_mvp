@@ -4,6 +4,50 @@ import { clsx } from 'clsx'
 import SlotCell from './SlotCell'
 import SlotPopover from './SlotPopover'
 import { resolveSlot } from '../../hooks/useAvailability'
+import { SLOT_STATUSES } from '../../lib/constants'
+
+// Two slots are mergeable when both have the same non-empty status
+function canMerge(am, pm) {
+  if (!am || !pm) return false
+  if (am.status === 'not_set' || pm.status === 'not_set') return false
+  return am.status === pm.status
+}
+
+const statusStyles = {
+  available:            'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
+  unavailable:          'bg-red-50 border-red-200 text-red-600 hover:bg-red-100',
+  ask_me:               'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
+  provisionally_booked: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
+  confirmed:            'bg-cyan-50 border-cyan-200 text-cyan-800 hover:bg-cyan-100',
+  not_set:              'bg-white border-cedr-border text-cedr-muted/50 hover:bg-cedr-light',
+}
+
+function MergedSlotCell({ slotData, day, onClick }) {
+  const { status, notes, cases } = slotData
+  const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'w-full flex flex-col gap-1 px-3 py-3 border rounded transition-all text-left',
+        statusStyles[status],
+        'min-h-[188px]' // ~2× single slot height (2 × 90 + gap)
+      )}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">Full day</span>
+      {status !== 'not_set' && (
+        <span className="text-sm font-semibold leading-tight">
+          {['provisionally_booked', 'confirmed'].includes(status) && cases?.case_name
+            ? cases.case_name
+            : meta.label}
+        </span>
+      )}
+      {notes && (
+        <span className="text-xs opacity-70 mt-auto leading-tight">{notes}</span>
+      )}
+    </button>
+  )
+}
 
 export default function WeekView({ currentDate, slots, series, mediatorId }) {
   const [popover, setPopover] = useState(null)
@@ -38,27 +82,35 @@ export default function WeekView({ currentDate, slots, series, mediatorId }) {
 
       {/* Slot grid */}
       <div className="grid grid-cols-7">
-        {days.map(day => (
-          <div
-            key={day.toISOString()}
-            className={clsx(
-              'border-r border-cedr-border last:border-r-0 p-2 space-y-2',
-              isToday(day) && 'bg-cedr-navy/[0.02]'
-            )}
-          >
-            {['morning', 'afternoon'].map(period => {
-              const slotData = resolveSlot(day, period, slots, series)
-              return (
-                <SlotCell
-                  key={period}
-                  slotData={slotData}
-                  period={period}
-                  onClick={() => openPopover(day, period)}
+        {days.map(day => {
+          const amSlot = resolveSlot(day, 'morning',   slots, series)
+          const pmSlot = resolveSlot(day, 'afternoon', slots, series)
+          const merged = canMerge(amSlot, pmSlot)
+
+          return (
+            <div
+              key={day.toISOString()}
+              className={clsx(
+                'border-r border-cedr-border last:border-r-0 p-2',
+                !merged && 'space-y-2',
+                isToday(day) && 'bg-cedr-navy/[0.02]'
+              )}
+            >
+              {merged ? (
+                <MergedSlotCell
+                  slotData={amSlot}
+                  day={day}
+                  onClick={() => openPopover(day, 'morning')}
                 />
-              )
-            })}
-          </div>
-        ))}
+              ) : (
+                <>
+                  <SlotCell slotData={amSlot} period="morning"   onClick={() => openPopover(day, 'morning')} />
+                  <SlotCell slotData={pmSlot} period="afternoon" onClick={() => openPopover(day, 'afternoon')} />
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {popover && (

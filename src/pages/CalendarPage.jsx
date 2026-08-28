@@ -1,18 +1,17 @@
 import { useState } from 'react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays } from 'date-fns'
-import { Bell } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useSlots, useRecurringSeries, useProvisionalBookings } from '../hooks/useAvailability'
-import CalendarHeader    from '../components/calendar/CalendarHeader'
-import WeekView          from '../components/calendar/WeekView'
-import MonthView         from '../components/calendar/MonthView'
-import ProvisionalBanner from '../components/calendar/ProvisionalBanner'
-import MediatorPicker    from '../components/calendar/MediatorPicker'
+import CalendarHeader     from '../components/calendar/CalendarHeader'
+import WeekView           from '../components/calendar/WeekView'
+import MonthView          from '../components/calendar/MonthView'
+import ProvisionalBanner  from '../components/calendar/ProvisionalBanner'
+import MediatorPicker     from '../components/calendar/MediatorPicker'
 import RequestUpdateModal from '../components/calendar/RequestUpdateModal'
-import { SLOT_STATUSES } from '../lib/constants'
+import { SLOT_STATUSES }  from '../lib/constants'
 
 export default function CalendarPage() {
-  const { activeMediatorId, activeMediatorProfile, isClerk, isSuperAdmin } = useAuth()
+  const { activeMediatorId, activeMediatorProfile } = useAuth()
   const [view, setView]               = useState('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showUpdateModal, setShowUpdateModal] = useState(false)
@@ -38,9 +37,6 @@ export default function CalendarPage() {
 
   const isLoading = slotsLoading || seriesLoading
 
-  // Show "Request update" button for clerks and super_admin (not for the mediator themselves)
-  const canRequestUpdate = (isClerk || isSuperAdmin) && activeMediatorProfile
-
   if (!mediatorId) {
     return (
       <div className="flex flex-col h-screen">
@@ -58,27 +54,17 @@ export default function CalendarPage() {
         setView={setView}
         currentDate={currentDate}
         setCurrentDate={setCurrentDate}
+        onRequestUpdate={() => setShowUpdateModal(true)}
       />
 
-      {/* Legend + Request update */}
-      <div className="flex items-center justify-between px-6 py-2 bg-white border-b border-cedr-border">
-        <div className="flex items-center gap-4">
-          {Object.entries(SLOT_STATUSES).filter(([k]) => k !== 'not_set').map(([key, meta]) => (
-            <div key={key} className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${meta.dot}`} />
-              <span className="text-xs text-cedr-muted">{meta.label}</span>
-            </div>
-          ))}
-        </div>
-        {canRequestUpdate && (
-          <button
-            onClick={() => setShowUpdateModal(true)}
-            className="flex items-center gap-1.5 text-xs font-medium text-cedr-navy hover:text-cedr-teal transition-colors"
-          >
-            <Bell size={13} />
-            Request availability update
-          </button>
-        )}
+      {/* Legend */}
+      <div className="flex items-center gap-4 px-6 py-2 bg-white border-b border-cedr-border">
+        {Object.entries(SLOT_STATUSES).filter(([k]) => k !== 'not_set').map(([key, meta]) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${meta.dot}`} />
+            <span className="text-xs text-cedr-muted">{meta.label}</span>
+          </div>
+        ))}
       </div>
 
       {isLoading ? (
@@ -86,19 +72,9 @@ export default function CalendarPage() {
           <div className="w-6 h-6 border-2 border-cedr-navy border-t-transparent rounded-full animate-spin" />
         </div>
       ) : view === 'week' ? (
-        <WeekView
-          currentDate={currentDate}
-          slots={slots}
-          series={series}
-          mediatorId={mediatorId}
-        />
+        <WeekView currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId} />
       ) : (
-        <MonthView
-          currentDate={currentDate}
-          slots={slots}
-          series={series}
-          mediatorId={mediatorId}
-        />
+        <MonthView currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId} />
       )}
 
       {showUpdateModal && (

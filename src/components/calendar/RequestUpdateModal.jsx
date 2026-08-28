@@ -4,7 +4,7 @@ import { X, Bell, Check } from 'lucide-react'
 const MAKE_WEBHOOK = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
 
 export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, mediatorId, onClose }) {
-  const [state, setState] = useState('confirm') // 'confirm' | 'sending' | 'sent' | 'error'
+  const [state, setState] = useState('confirm')
   const [error, setError] = useState(null)
 
   async function handleConfirm() {
@@ -14,7 +14,8 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          mediator_id:             mediatorId,
+          event:                      'request_availability_update',
+          mediator_id:                mediatorId,
           hubspot_mediator_object_id: hubspotMediatorId,
         }),
       })
@@ -28,11 +29,8 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
-      <div
-        onClick={e => e.stopPropagation()}
-        className="bg-white rounded-lg shadow-popover border border-cedr-border w-80 overflow-hidden"
-      >
-        {/* Header */}
+      <div onClick={e => e.stopPropagation()}
+        className="bg-white rounded-lg shadow-popover border border-cedr-border w-80 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
           <div className="flex items-center gap-2">
             <Bell size={15} className="text-cedr-navy" />
@@ -42,7 +40,6 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
             <X size={14} className="text-cedr-muted" />
           </button>
         </div>
-
         <div className="p-5">
           {state === 'confirm' && (
             <>
@@ -51,20 +48,16 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
               </p>
               <div className="flex gap-2">
                 <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
-                <button onClick={handleConfirm} className="btn-primary flex-1 text-sm">
-                  Send request
-                </button>
+                <button onClick={handleConfirm} className="btn-primary flex-1 text-sm">Send request</button>
               </div>
             </>
           )}
-
           {state === 'sending' && (
             <div className="flex items-center justify-center gap-3 py-2">
               <div className="w-4 h-4 border-2 border-cedr-navy border-t-transparent rounded-full animate-spin" />
               <p className="text-sm text-cedr-muted">Sending…</p>
             </div>
           )}
-
           {state === 'sent' && (
             <div className="flex flex-col items-center gap-2 py-2">
               <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
@@ -74,7 +67,6 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
               <p className="text-xs text-cedr-muted">{mediatorName} will receive an email shortly.</p>
             </div>
           )}
-
           {state === 'error' && (
             <div className="space-y-3">
               <p className="text-sm text-red-600">Failed to send: {error}</p>
