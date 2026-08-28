@@ -6,15 +6,11 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [session, setSession]   = useState(undefined)
   const [profile, setProfile]   = useState(null)
-  // activeMediatorId: whose calendar we're currently managing
-  // - mediator: always their own id
-  // - clerk: the selected mediator's id (null = not selected yet)
-  // - super_admin: null (they pick from admin page)
   const [activeMediatorId, setActiveMediatorIdState] = useState(
     () => sessionStorage.getItem('active_mediator_id')
   )
   const [activeMediatorProfile, setActiveMediatorProfile] = useState(null)
-  const [clerkAssignments, setClerkAssignments]           = useState(null) // null = not loaded yet
+  const [clerkAssignments, setClerkAssignments]           = useState(null)
 
   function setActiveMediatorId(id) {
     setActiveMediatorIdState(id)
@@ -40,7 +36,6 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  // When activeMediatorId changes, fetch that mediator's profile for display
   useEffect(() => {
     if (!activeMediatorId) { setActiveMediatorProfile(null); return }
     supabase
@@ -67,10 +62,9 @@ export function AuthProvider({ children }) {
     setProfile(data)
 
     if (data.role === 'mediator') {
-      // Mediator always sees their own calendar
       setActiveMediatorId(data.id)
+
     } else if (data.role === 'clerk') {
-      // Load assignments to determine routing
       const { data: assignments } = await supabase
         .from('mediator_clerk_assignments')
         .select('mediator_id, mediator:mediator_id(id, full_name, first_name, last_name, email, avatar_url)')
@@ -79,31 +73,38 @@ export function AuthProvider({ children }) {
       setClerkAssignments(assignments || [])
 
       if (assignments?.length === 1) {
-        // Single mediator — auto-select
         setActiveMediatorId(assignments[0].mediator_id)
       } else if (assignments?.length > 1) {
-        // Multiple — only keep stored selection if it's valid
         const stored = sessionStorage.getItem('active_mediator_id')
         const valid  = assignments.some(a => a.mediator_id === stored)
         if (!valid) setActiveMediatorId(null)
       }
+
+    } else if (data.role === 'super_admin') {
+      // When opened from HubSpot CRM card iframe, ?mediator_id=xxx is passed in the URL
+      // This auto-selects the mediator so the CRA sees the right calendar immediately
+      const urlParams   = new URLSearchParams(window.location.search)
+      const urlMediator = urlParams.get('mediator_id')
+      if (urlMediator) {
+        setActiveMediatorId(urlMediator)
+      }
+      // Otherwise stays null → MediatorPicker shown
     }
-    // super_admin: activeMediatorId stays null until they pick one from admin
   }
 
   const value = {
     session,
     profile,
-    loading:               session === undefined,
-    isAuthenticated:       !!session,
-    isSuperAdmin:          profile?.role === 'super_admin',
-    isMediator:            profile?.role === 'mediator',
-    isClerk:               profile?.role === 'clerk',
+    loading:             session === undefined,
+    isAuthenticated:     !!session,
+    isSuperAdmin:        profile?.role === 'super_admin',
+    isMediator:          profile?.role === 'mediator',
+    isClerk:             profile?.role === 'clerk',
     activeMediatorId,
     setActiveMediatorId,
     activeMediatorProfile,
-    clerkAssignments,      // list of {mediator_id, mediator: {...}} for clerks
-    needsMediatorSelect:   profile?.role === 'clerk' && clerkAssignments !== null && !activeMediatorId && clerkAssignments.length > 1,
+    clerkAssignments,
+    needsMediatorSelect: profile?.role === 'clerk' && clerkAssignments !== null && !activeMediatorId && clerkAssignments.length > 1,
     refreshProfile: () => session && fetchProfile(session.user.id),
   }
 
