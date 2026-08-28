@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, ArrowLeft, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const APP_URL = import.meta.env.VITE_APP_URL ?? 'https://cedr-mediator-mvp.team-cd8.workers.dev'
 
+const DEACTIVATED_MSG = 'Your account has been deactivated. Please contact mediations@cedr.com for assistance.'
+
 export default function LoginPage() {
-  const [mode, setMode] = useState('login') // 'login' | 'forgot'
+  const [mode, setMode] = useState('login')
   return mode === 'login'
     ? <LoginForm onForgot={() => setMode('forgot')} />
     : <ForgotForm onBack={() => setMode('login')} />
@@ -20,14 +22,44 @@ function LoginForm({ onForgot }) {
   const [loading, setLoading]   = useState(false)
   const navigate = useNavigate()
 
+  // Pick up deactivation flag set by auth.jsx fetchProfile (session persistence case)
+  useEffect(() => {
+    const flag = sessionStorage.getItem('auth_error')
+    if (flag === 'deactivated') {
+      setError(DEACTIVATED_MSG)
+      sessionStorage.removeItem('auth_error')
+    }
+  }, [])
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (signInError) {
+      setLoading(false)
+      setError(signInError.message)
+      return
+    }
+
+    // Check is_active immediately after successful auth — before navigating
+    const { data: profile } = await supabase
+      .from('users')
+      .select('is_active')
+      .eq('id', data.user.id)
+      .single()
+
+    if (!profile?.is_active) {
+      await supabase.auth.signOut()
+      setLoading(false)
+      setError(DEACTIVATED_MSG)
+      return
+    }
+
     setLoading(false)
-    if (error) setError(error.message)
-    else navigate('/')
+    navigate('/')
   }
 
   return (
@@ -46,9 +78,7 @@ function LoginForm({ onForgot }) {
         <div className="card p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-cedr-text mb-1">
-                Email address
-              </label>
+              <label className="block text-sm font-medium text-cedr-text mb-1">Email address</label>
               <input
                 type="email"
                 value={email}
@@ -63,11 +93,7 @@ function LoginForm({ onForgot }) {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-cedr-text">Password</label>
-                <button
-                  type="button"
-                  onClick={onForgot}
-                  className="text-xs text-cedr-teal hover:underline"
-                >
+                <button type="button" onClick={onForgot} className="text-xs text-cedr-teal hover:underline">
                   Forgot password?
                 </button>
               </div>
@@ -91,9 +117,13 @@ function LoginForm({ onForgot }) {
             </div>
 
             {error && (
-              <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
+              <div className={`text-sm rounded px-3 py-2.5 border ${
+                error === DEACTIVATED_MSG
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-red-50 border-red-200 text-red-600'
+              }`}>
                 {error}
-              </p>
+              </div>
             )}
 
             <button type="submit" disabled={loading} className="btn-primary w-full">
@@ -104,9 +134,7 @@ function LoginForm({ onForgot }) {
 
         <p className="text-center text-cedr-muted text-xs mt-6">
           Access is managed by CEDR. Contact{' '}
-          <a href="mailto:mediations@cedr.com" className="underline">
-            mediations@cedr.com
-          </a>{' '}
+          <a href="mailto:mediations@cedr.com" className="underline">mediations@cedr.com</a>{' '}
           if you need help.
         </p>
       </div>
@@ -115,10 +143,10 @@ function LoginForm({ onForgot }) {
 }
 
 function ForgotForm({ onBack }) {
-  const [email, setEmail]   = useState('')
+  const [email, setEmail]     = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent]     = useState(false)
-  const [error, setError]   = useState(null)
+  const [sent, setSent]       = useState(false)
+  const [error, setError]     = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -142,9 +170,7 @@ function ForgotForm({ onBack }) {
             className="h-9 mx-auto mb-3"
           />
           <h1 className="text-cedr-navy font-semibold text-lg">Reset your password</h1>
-          <p className="text-cedr-muted text-sm mt-1">
-            We'll send you a link to set a new password.
-          </p>
+          <p className="text-cedr-muted text-sm mt-1">We'll send you a link to set a new password.</p>
         </div>
 
         <div className="card p-6">
@@ -155,22 +181,16 @@ function ForgotForm({ onBack }) {
               </div>
               <p className="text-sm font-medium text-cedr-navy">Check your inbox</p>
               <p className="text-sm text-cedr-muted">
-                We've sent a password reset link to <strong>{email}</strong>.
-                It may take a minute to arrive.
+                We've sent a reset link to <strong>{email}</strong>. It may take a minute to arrive.
               </p>
-              <button
-                onClick={onBack}
-                className="text-sm text-cedr-teal hover:underline mt-2 block mx-auto"
-              >
+              <button onClick={onBack} className="text-sm text-cedr-teal hover:underline mt-2 block mx-auto">
                 Back to sign in
               </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-cedr-text mb-1">
-                  Email address
-                </label>
+                <label className="block text-sm font-medium text-cedr-text mb-1">Email address</label>
                 <input
                   type="email"
                   value={email}
@@ -181,22 +201,14 @@ function ForgotForm({ onBack }) {
                   autoFocus
                 />
               </div>
-
               {error && (
-                <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
-                  {error}
-                </p>
+                <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
               )}
-
               <button type="submit" disabled={loading} className="btn-primary w-full">
                 {loading ? 'Sending…' : 'Send reset link'}
               </button>
-
-              <button
-                type="button"
-                onClick={onBack}
-                className="flex items-center justify-center gap-1.5 w-full text-sm text-cedr-muted hover:text-cedr-text transition-colors"
-              >
+              <button type="button" onClick={onBack}
+                className="flex items-center justify-center gap-1.5 w-full text-sm text-cedr-muted hover:text-cedr-text transition-colors">
                 <ArrowLeft size={13} />
                 Back to sign in
               </button>

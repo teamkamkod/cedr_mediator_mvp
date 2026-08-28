@@ -59,6 +59,7 @@ export function AuthProvider({ children }) {
       .single()
 
     if (!data || data.is_active === false) {
+      sessionStorage.setItem('auth_error', 'deactivated')
       await supabase.auth.signOut()
       return
     }
