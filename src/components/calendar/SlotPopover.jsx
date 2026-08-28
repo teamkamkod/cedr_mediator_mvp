@@ -1,20 +1,24 @@
 import { useState, useRef, useEffect } from 'react'
 import { format, getDay } from 'date-fns'
-import { X, Repeat } from 'lucide-react'
+import { X, Repeat, Sun } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SLOT_STATUSES, EDITABLE_STATUSES, RECURRENCE_FREQUENCIES } from '../../lib/constants'
 import { useUpsertSlot, useCreateSeries } from '../../hooks/useAvailability'
 
 export default function SlotPopover({ slot, date, period, mediatorId, onClose }) {
-  const [status, setStatus]       = useState(slot?.status || 'not_set')
-  const [notes, setNotes]         = useState(slot?.notes || '')
-  const [mode, setMode]           = useState('one_time') // 'one_time' | 'recurring'
-  const [frequency, setFreq]      = useState('weekly')
-  const [endDate, setEndDate]     = useState('')
-  const [confirmSeries, setConfirmSeries] = useState(false) // step 2 for series slots
+  const [status, setStatus]           = useState(slot?.status || 'not_set')
+  const [notes, setNotes]             = useState(slot?.notes || '')
+  const [mode, setMode]               = useState('one_time')
+  const [frequency, setFreq]          = useState('weekly')
+  const [endDate, setEndDate]         = useState('')
+  const [fullDay, setFullDay]         = useState(false)        // ← new
+  const [confirmSeries, setConfirmSeries] = useState(false)
 
+  const isNew        = !slot || slot.source === 'none'
   const isFromSeries = slot?.source === 'series'
   const isBooked     = ['provisionally_booked', 'confirmed'].includes(slot?.status)
+  // Full day toggle only makes sense when creating a fresh slot (not editing, not series)
+  const canFullDay   = isNew && !isFromSeries && mode !== 'recurring'
 
   const upsert       = useUpsertSlot()
   const createSeries = useCreateSeries()
@@ -28,17 +32,18 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
+  // When switching to recurring, force off full day
+  function handleModeChange(m) {
+    setMode(m)
+    if (m === 'recurring') setFullDay(false)
+  }
+
   async function handleSave() {
     if (isBooked) return onClose()
-
-    // Series slot → show confirmation step first
-    if (isFromSeries && !confirmSeries) {
-      setConfirmSeries(true)
-      return
-    }
+    if (isFromSeries && !confirmSeries) { setConfirmSeries(true); return }
 
     if (mode === 'recurring' && !isFromSeries) {
-      const rawDay   = getDay(date)
+      const rawDay    = getDay(date)
       const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1
       await createSeries.mutateAsync({
         mediator_id: mediatorId,
@@ -47,47 +52,41 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
         status,
         frequency,
         start_date: format(date, 'yyyy-MM-dd'),
-        end_date: endDate || null,
-        notes: notes || null,
+        end_date:   endDate || null,
+        notes:      notes || null,
       })
     } else {
+      const dateStr   = format(date, 'yyyy-MM-dd')
+      const otherPeriod = period === 'morning' ? 'afternoon' : 'morning'
+
+      // Primary slot
       await upsert.mutateAsync({
-        mediatorId,
-        date:        format(date, 'yyyy-MM-dd'),
-        period,
-        status,
-        notes,
+        mediatorId, date: dateStr, period, status, notes,
         seriesId:    isFromSeries ? slot.series_id : null,
         isException: isFromSeries,
       })
+
+      // If full day toggled, upsert the other period too
+      if (fullDay && canFullDay) {
+        await upsert.mutateAsync({
+          mediatorId, date: dateStr, period: otherPeriod, status, notes,
+          seriesId: null, isException: false,
+        })
+      }
     }
     onClose()
   }
 
   async function handleSeriesConfirm(scope) {
-    // scope: 'this' | 'all'
-    if (scope === 'this') {
-      await upsert.mutateAsync({
-        mediatorId,
-        date:        format(date, 'yyyy-MM-dd'),
-        period,
-        status,
-        notes,
-        seriesId:    slot.series_id,
-        isException: true,
-      })
-    } else {
-      // Update all: upsert explicit + ideally patch the series — for MVP upsert as exception
-      await upsert.mutateAsync({
-        mediatorId,
-        date:        format(date, 'yyyy-MM-dd'),
-        period,
-        status,
-        notes,
-        seriesId:    slot.series_id,
-        isException: false,
-      })
-    }
+    await upsert.mutateAsync({
+      mediatorId,
+      date:        format(date, 'yyyy-MM-dd'),
+      period,
+      status,
+      notes,
+      seriesId:    slot.series_id,
+      isException: scope === 'this',
+    })
     onClose()
   }
 
@@ -103,10 +102,10 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
           <div>
-            <p className="text-sm font-semibold text-cedr-navy">
-              {format(date, 'EEE, MMM d')}
+            <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
+            <p className="text-xs text-cedr-muted capitalize">
+              {fullDay && canFullDay ? 'Full day' : period}
             </p>
-            <p className="text-xs text-cedr-muted capitalize">{period}</p>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light">
             <X size={14} className="text-cedr-muted" />
@@ -121,36 +120,28 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
               This is a recurring slot
             </div>
             <p className="text-xs text-cedr-muted leading-relaxed">
-              Do you want to apply this change only to <strong>{format(date, 'EEE d MMM')}</strong>,
-              or to all future occurrences of this recurring slot?
+              Apply this change only to <strong>{format(date, 'EEE d MMM')}</strong>,
+              or to all future occurrences?
             </p>
             <div className="space-y-2">
-              <button
-                onClick={() => handleSeriesConfirm('this')}
-                disabled={saving}
-                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors"
-              >
+              <button onClick={() => handleSeriesConfirm('this')} disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors">
                 <p className="text-sm font-medium text-cedr-text">This slot only</p>
                 <p className="text-xs text-cedr-muted mt-0.5">Only {format(date, 'EEE d MMM')} will be updated</p>
               </button>
-              <button
-                onClick={() => handleSeriesConfirm('all')}
-                disabled={saving}
-                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors"
-              >
+              <button onClick={() => handleSeriesConfirm('all')} disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors">
                 <p className="text-sm font-medium text-cedr-text">All future slots</p>
                 <p className="text-xs text-cedr-muted mt-0.5">All upcoming occurrences will be updated</p>
               </button>
             </div>
-            <button
-              onClick={() => setConfirmSeries(false)}
-              className="text-xs text-cedr-muted hover:text-cedr-text transition-colors w-full text-center"
-            >
+            <button onClick={() => setConfirmSeries(false)}
+              className="text-xs text-cedr-muted hover:text-cedr-text transition-colors w-full text-center">
               ← Back
             </button>
           </div>
 
-        /* ── Step 1: Main edit view ── */
+        /* ── Booked: read only ── */
         ) : isBooked ? (
           <div className="p-4 space-y-3">
             <div className={clsx('status-badge border', SLOT_STATUSES[slot.status]?.color)}>
@@ -161,16 +152,19 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
                 <p className="font-semibold text-cedr-navy">
                   {slot.cases.case_name || `Case #${slot.cases.hubspot_deal_id}`}
                 </p>
-                {slot.cases.raw_hs_data?.venue    && <p className="text-cedr-muted">📍 {slot.cases.raw_hs_data.venue}</p>}
-                {slot.cases.raw_hs_data?.parties  && <p className="text-cedr-muted">👥 {slot.cases.raw_hs_data.parties} parties</p>}
+                {slot.cases.raw_hs_data?.venue   && <p className="text-cedr-muted">📍 {slot.cases.raw_hs_data.venue}</p>}
+                {slot.cases.raw_hs_data?.parties && <p className="text-cedr-muted">👥 {slot.cases.raw_hs_data.parties} parties</p>}
               </div>
             )}
             {slot.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
           </div>
+
+        /* ── Step 1: Edit form ── */
         ) : (
           <>
             <div className="p-4 space-y-4">
-              {/* Series badge — info only, no selector */}
+
+              {/* Series badge */}
               {isFromSeries && (
                 <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                   <Repeat size={12} />
@@ -178,21 +172,48 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
                 </div>
               )}
 
+              {/* Full day toggle — creation only */}
+              {canFullDay && (
+                <label className={clsx(
+                  'flex items-center justify-between p-3 rounded border cursor-pointer transition-all select-none',
+                  fullDay
+                    ? 'border-cedr-navy bg-cedr-light'
+                    : 'border-cedr-border hover:border-cedr-navy/30'
+                )}>
+                  <div className="flex items-center gap-2">
+                    <Sun size={14} className={fullDay ? 'text-cedr-navy' : 'text-cedr-muted'} />
+                    <span className={clsx('text-sm font-medium', fullDay ? 'text-cedr-navy' : 'text-cedr-text')}>
+                      Full day
+                    </span>
+                    <span className="text-xs text-cedr-muted">— sets AM & PM at once</span>
+                  </div>
+                  <div
+                    className={clsx(
+                      'w-9 h-5 rounded-full transition-colors relative',
+                      fullDay ? 'bg-cedr-navy' : 'bg-cedr-border'
+                    )}
+                  >
+                    <div className={clsx(
+                      'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
+                      fullDay ? 'translate-x-4' : 'translate-x-0.5'
+                    )} />
+                  </div>
+                  <input type="checkbox" checked={fullDay} onChange={e => setFullDay(e.target.checked)} className="sr-only" />
+                </label>
+              )}
+
               {/* Status picker */}
               <div>
                 <p className="text-xs font-medium text-cedr-muted mb-2 uppercase tracking-wide">Status</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {EDITABLE_STATUSES.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setStatus(s)}
+                    <button key={s} onClick={() => setStatus(s)}
                       className={clsx(
                         'px-2 py-2 rounded text-xs font-medium border transition-all',
                         status === s
                           ? SLOT_STATUSES[s].color + ' ring-2 ring-offset-1 ring-cedr-navy/30'
                           : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30'
-                      )}
-                    >
+                      )}>
                       {SLOT_STATUSES[s].label}
                     </button>
                   ))}
@@ -202,31 +223,24 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
               {/* Notes */}
               <div>
                 <p className="text-xs font-medium text-cedr-muted mb-1 uppercase tracking-wide">Notes</p>
-                <textarea
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
+                <textarea value={notes} onChange={e => setNotes(e.target.value)}
                   placeholder="Optional context visible to CEDR team…"
-                  rows={2}
-                  className="input text-xs resize-none"
-                />
+                  rows={2} className="input text-xs resize-none" />
               </div>
 
-              {/* Recurrence toggle — only for new non-series slots */}
+              {/* Recurrence toggle — new non-series slots only */}
               {!isFromSeries && (
                 <div>
                   <p className="text-xs font-medium text-cedr-muted mb-2 uppercase tracking-wide">Repeat</p>
                   <div className="flex gap-1.5">
                     {[{ value: 'one_time', label: 'One time' }, { value: 'recurring', label: 'Recurring' }].map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setMode(opt.value)}
+                      <button key={opt.value} onClick={() => handleModeChange(opt.value)}
                         className={clsx(
                           'flex-1 py-1.5 rounded text-xs font-medium border transition-all',
                           mode === opt.value
                             ? 'bg-cedr-navy text-white border-cedr-navy'
                             : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30'
-                        )}
-                      >
+                        )}>
                         {opt.value === 'recurring' && <Repeat size={10} className="inline mr-1" />}
                         {opt.label}
                       </button>
@@ -254,12 +268,8 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
 
             <div className="flex gap-2 px-4 pb-4">
               <button onClick={onClose} className="btn-secondary flex-1 text-xs">Cancel</button>
-              <button
-                onClick={handleSave}
-                disabled={saving || status === 'not_set'}
-                className="btn-primary flex-1 text-xs"
-              >
-                {saving ? 'Saving…' : 'Save'}
+              <button onClick={handleSave} disabled={saving || status === 'not_set'} className="btn-primary flex-1 text-xs">
+                {saving ? 'Saving…' : fullDay && canFullDay ? 'Save full day' : 'Save'}
               </button>
             </div>
           </>
