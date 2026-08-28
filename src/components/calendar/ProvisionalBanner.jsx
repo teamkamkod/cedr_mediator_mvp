@@ -1,11 +1,14 @@
 import { format, parseISO } from 'date-fns'
 import { Bell, Check, X } from 'lucide-react'
 import { useRespondToBooking } from '../../hooks/useAvailability'
+import { useAuth } from '../../lib/auth'
 
 export default function ProvisionalBanner({ bookings, mediatorId }) {
   const respond = useRespondToBooking()
+  const { isMediator, isClerk } = useAuth()
 
-  if (!bookings?.length) return null
+  // Only mediators and clerks can respond to bookings
+  if (!bookings?.length || (!isMediator && !isClerk)) return null
 
   async function handleAction(slot, action) {
     await respond.mutateAsync({ slotId: slot.id, mediatorId, action })

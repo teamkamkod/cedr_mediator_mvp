@@ -206,13 +206,15 @@ export function useRespondToBooking() {
         .eq('id', slotId)
       if (error) throw error
 
-      const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
-      if (webhookUrl) {
-        await fetch(webhookUrl, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ slot_id: slotId, mediator_id: mediatorId, action }),
-        }).catch(() => {})
+      if (action === 'accept') {
+        const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
+        if (webhookUrl) {
+          await fetch(webhookUrl, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ event: 'provisional_booking_confirmed', slot_id: slotId, mediator_id: mediatorId }),
+          }).catch(() => {})
+        }
       }
     },
     onSuccess: (_, { mediatorId }) => {

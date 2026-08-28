@@ -1,13 +1,16 @@
+import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Calendar, User, Shield, LogOut, RefreshCw } from 'lucide-react'
+import { Calendar, User, Shield, LogOut, RefreshCw, HelpCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { clsx } from 'clsx'
+import HelpModal from './HelpModal'
 
 export default function AppLayout() {
-  const { profile, isSuperAdmin, isClerk, clerkAssignments,
+  const { profile, isSuperAdmin, isClerk, isMediator, clerkAssignments,
           activeMediatorProfile, setActiveMediatorId } = useAuth()
   const navigate = useNavigate()
+  const [showHelp, setShowHelp] = useState(false)
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -16,28 +19,26 @@ export default function AppLayout() {
 
   function handleSwitchMediator() {
     setActiveMediatorId(null)
-    // Super admin → MediatorPicker is inline on the calendar page
-    // Clerk → dedicated select-mediator page
     navigate(isSuperAdmin ? '/' : '/select-mediator', { replace: true })
   }
 
+  const showHelperLink = isMediator || isClerk
+
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar */}
       <aside className="w-60 bg-cedr-navy flex flex-col shrink-0">
         {/* Logo */}
         <div className="px-6 py-5 border-b border-white/10">
           <img
             src="https://www.cedr.com/hubfs/New_CEDR_2025/Images/CEDR-logo%20White.svg"
-            alt="CEDR"
-            className="h-7"
+            alt="CEDR" className="h-7"
           />
           <p className="text-white/50 text-xs mt-1 font-medium tracking-wide uppercase">
             Mediator Portal
           </p>
         </div>
 
-        {/* Active mediator banner — shown to clerks and super_admin when a mediator is selected */}
+        {/* Active mediator banner */}
         {(isClerk || isSuperAdmin) && activeMediatorProfile && (
           <div className="px-4 py-3 bg-white/10 border-b border-white/10">
             <p className="text-white/50 text-[10px] uppercase tracking-wide font-medium mb-1">
@@ -50,7 +51,6 @@ export default function AppLayout() {
                   {activeMediatorProfile.full_name}
                 </p>
               </div>
-              {/* Clerks: show if multiple assignments. Super admin: always show */}
               {(isSuperAdmin || (clerkAssignments?.length > 1)) && (
                 <button
                   onClick={handleSwitchMediator}
@@ -73,6 +73,19 @@ export default function AppLayout() {
           )}
         </nav>
 
+        {/* Help link — mediators and clerks only */}
+        {showHelperLink && (
+          <div className="px-4 pb-2">
+            <button
+              onClick={() => setShowHelp(true)}
+              className="flex items-center gap-2 text-white/40 hover:text-white/70 text-sm transition-colors w-full py-1"
+            >
+              <HelpCircle size={14} />
+              Help
+            </button>
+          </div>
+        )}
+
         {/* User footer */}
         <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 mb-3">
@@ -94,30 +107,25 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   )
 }
 
 function NavItem({ to, icon, label, end }) {
   return (
-    <NavLink
-      to={to}
-      end={end}
+    <NavLink to={to} end={end}
       className={({ isActive }) =>
         clsx(
           'flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors',
-          isActive
-            ? 'bg-white/15 text-white'
-            : 'text-white/60 hover:text-white hover:bg-white/10'
+          isActive ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/10'
         )
-      }
-    >
-      {icon}
-      {label}
+      }>
+      {icon}{label}
     </NavLink>
   )
 }
@@ -126,11 +134,8 @@ export function Avatar({ profile, size = 'md' }) {
   const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-12 h-12 text-base' }
   if (profile?.avatar_url) {
     return (
-      <img
-        src={profile.avatar_url}
-        alt={profile.full_name}
-        className={clsx('rounded-full object-cover', sizes[size])}
-      />
+      <img src={profile.avatar_url} alt={profile.full_name}
+        className={clsx('rounded-full object-cover', sizes[size])} />
     )
   }
   const initials = [profile?.first_name?.[0], profile?.last_name?.[0]].filter(Boolean).join('') || '?'
