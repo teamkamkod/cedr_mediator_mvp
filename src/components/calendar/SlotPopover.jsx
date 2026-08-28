@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { format, getDay } from 'date-fns'
-import { X, Repeat, Sun } from 'lucide-react'
+import { X, Repeat, Sun, AlertTriangle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SLOT_STATUSES, EDITABLE_STATUSES, RECURRENCE_FREQUENCIES } from '../../lib/constants'
 import { useUpsertSlot, useCreateSeries } from '../../hooks/useAvailability'
@@ -11,14 +11,14 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
   const [mode, setMode]               = useState('one_time')
   const [frequency, setFreq]          = useState('weekly')
   const [endDate, setEndDate]         = useState('')
-  const [fullDay, setFullDay]         = useState(false)        // ← new
+  const [fullDay, setFullDay]         = useState(false)
   const [confirmSeries, setConfirmSeries] = useState(false)
 
   const isNew        = !slot || slot.source === 'none'
   const isFromSeries = slot?.source === 'series'
   const isBooked     = ['provisionally_booked', 'confirmed'].includes(slot?.status)
-  // Full day toggle only makes sense when creating a fresh slot (not editing, not series)
-  const canFullDay   = isNew && !isFromSeries && mode !== 'recurring'
+  // Full day available for both one-time and recurring on fresh slots
+  const canFullDay   = isNew && !isFromSeries
 
   const upsert       = useUpsertSlot()
   const createSeries = useCreateSeries()
@@ -32,42 +32,42 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
-  // When switching to recurring, force off full day
-  function handleModeChange(m) {
-    setMode(m)
-    if (m === 'recurring') setFullDay(false)
-  }
-
   async function handleSave() {
     if (isBooked) return onClose()
     if (isFromSeries && !confirmSeries) { setConfirmSeries(true); return }
 
+    const dateStr     = format(date, 'yyyy-MM-dd')
+    const otherPeriod = period === 'morning' ? 'afternoon' : 'morning'
+
     if (mode === 'recurring' && !isFromSeries) {
       const rawDay    = getDay(date)
       const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1
-      await createSeries.mutateAsync({
+      const seriesBase = {
         mediator_id: mediatorId,
         day_of_week: dayOfWeek,
-        period,
         status,
         frequency,
-        start_date: format(date, 'yyyy-MM-dd'),
+        start_date: dateStr,
         end_date:   endDate || null,
         notes:      notes || null,
-      })
+      }
+      if (fullDay) {
+        // Create a series for each period in parallel
+        await Promise.all([
+          createSeries.mutateAsync({ ...seriesBase, period: 'morning' }),
+          createSeries.mutateAsync({ ...seriesBase, period: 'afternoon' }),
+        ])
+      } else {
+        await createSeries.mutateAsync({ ...seriesBase, period })
+      }
     } else {
-      const dateStr   = format(date, 'yyyy-MM-dd')
-      const otherPeriod = period === 'morning' ? 'afternoon' : 'morning'
-
-      // Primary slot
+      // One-time upsert(s)
       await upsert.mutateAsync({
         mediatorId, date: dateStr, period, status, notes,
         seriesId:    isFromSeries ? slot.series_id : null,
         isException: isFromSeries,
       })
-
-      // If full day toggled, upsert the other period too
-      if (fullDay && canFullDay) {
+      if (fullDay && canFullDay && mode !== 'recurring') {
         await upsert.mutateAsync({
           mediatorId, date: dateStr, period: otherPeriod, status, notes,
           seriesId: null, isException: false,
@@ -92,6 +92,9 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
 
   const saving = upsert.isPending || createSeries.isPending
 
+  // Conflict warning: shown when recurring + full day selected
+  const showConflictWarning = mode === 'recurring' && fullDay && canFullDay
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
       <div
@@ -105,6 +108,7 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
             <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
             <p className="text-xs text-cedr-muted capitalize">
               {fullDay && canFullDay ? 'Full day' : period}
+              {mode === 'recurring' ? ' · recurring' : ''}
             </p>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light">
@@ -112,7 +116,7 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
           </button>
         </div>
 
-        {/* ── Step 2: Series confirmation ── */}
+        {/* ── Series confirmation ── */}
         {confirmSeries ? (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-cedr-navy">
@@ -159,12 +163,11 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
             {slot.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
           </div>
 
-        /* ── Step 1: Edit form ── */
+        /* ── Edit form ── */
         ) : (
           <>
             <div className="p-4 space-y-4">
 
-              {/* Series badge */}
               {isFromSeries && (
                 <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                   <Repeat size={12} />
@@ -172,13 +175,11 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
                 </div>
               )}
 
-              {/* Full day toggle — creation only */}
+              {/* Full day toggle */}
               {canFullDay && (
                 <label className={clsx(
                   'flex items-center justify-between p-3 rounded border cursor-pointer transition-all select-none',
-                  fullDay
-                    ? 'border-cedr-navy bg-cedr-light'
-                    : 'border-cedr-border hover:border-cedr-navy/30'
+                  fullDay ? 'border-cedr-navy bg-cedr-light' : 'border-cedr-border hover:border-cedr-navy/30'
                 )}>
                   <div className="flex items-center gap-2">
                     <Sun size={14} className={fullDay ? 'text-cedr-navy' : 'text-cedr-muted'} />
@@ -187,19 +188,21 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
                     </span>
                     <span className="text-xs text-cedr-muted">— sets AM & PM at once</span>
                   </div>
-                  <div
-                    className={clsx(
-                      'w-9 h-5 rounded-full transition-colors relative',
-                      fullDay ? 'bg-cedr-navy' : 'bg-cedr-border'
-                    )}
-                  >
-                    <div className={clsx(
-                      'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
-                      fullDay ? 'translate-x-4' : 'translate-x-0.5'
-                    )} />
+                  <div className={clsx('w-9 h-5 rounded-full transition-colors relative', fullDay ? 'bg-cedr-navy' : 'bg-cedr-border')}>
+                    <div className={clsx('absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform', fullDay ? 'translate-x-4' : 'translate-x-0.5')} />
                   </div>
                   <input type="checkbox" checked={fullDay} onChange={e => setFullDay(e.target.checked)} className="sr-only" />
                 </label>
+              )}
+
+              {/* Conflict warning — recurring + full day */}
+              {showConflictWarning && (
+                <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2.5">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                  <span className="leading-relaxed">
+                    Two recurring rules will be created (AM & PM). Dates that already have individual slots set will <strong>not</strong> be affected — existing entries always take priority over recurring rules.
+                  </span>
+                </div>
               )}
 
               {/* Status picker */}
@@ -228,13 +231,13 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
                   rows={2} className="input text-xs resize-none" />
               </div>
 
-              {/* Recurrence toggle — new non-series slots only */}
+              {/* Recurrence toggle */}
               {!isFromSeries && (
                 <div>
                   <p className="text-xs font-medium text-cedr-muted mb-2 uppercase tracking-wide">Repeat</p>
                   <div className="flex gap-1.5">
                     {[{ value: 'one_time', label: 'One time' }, { value: 'recurring', label: 'Recurring' }].map(opt => (
-                      <button key={opt.value} onClick={() => handleModeChange(opt.value)}
+                      <button key={opt.value} onClick={() => setMode(opt.value)}
                         className={clsx(
                           'flex-1 py-1.5 rounded text-xs font-medium border transition-all',
                           mode === opt.value
@@ -269,7 +272,10 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
             <div className="flex gap-2 px-4 pb-4">
               <button onClick={onClose} className="btn-secondary flex-1 text-xs">Cancel</button>
               <button onClick={handleSave} disabled={saving || status === 'not_set'} className="btn-primary flex-1 text-xs">
-                {saving ? 'Saving…' : fullDay && canFullDay ? 'Save full day' : 'Save'}
+                {saving ? 'Saving…'
+                  : mode === 'recurring' && fullDay ? 'Save recurring full day'
+                  : fullDay && canFullDay          ? 'Save full day'
+                  : 'Save'}
               </button>
             </div>
           </>
