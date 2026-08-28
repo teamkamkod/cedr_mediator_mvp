@@ -13,78 +13,87 @@ const STATUS = {
   not_set:              { label: '',             variant: 'default'  },
 }
 
-function toDateStr(d) {
-  return d.toISOString().slice(0, 10)
+function toUTCDateStr(d) { return d.toISOString().slice(0, 10) }
+
+function todayUTC() {
+  const n = new Date()
+  return `${n.getUTCFullYear()}-${String(n.getUTCMonth()+1).padStart(2,'0')}-${String(n.getUTCDate()).padStart(2,'0')}`
 }
 
-function getMondayOfWeek(offset = 0) {
-  const today  = new Date()
-  const day    = today.getDay() || 7
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - day + 1 + offset * 7)
-  monday.setHours(0, 0, 0, 0)
-  return monday
+function getMondayUTC(offset = 0) {
+  const now = new Date()
+  const day = now.getUTCDay() || 7
+  const m   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  m.setUTCDate(m.getUTCDate() - day + 1 + offset * 7)
+  return m
 }
 
-function getWeekDays(offset = 0) {
-  const monday = getMondayOfWeek(offset)
+function getWeekDaysUTC(offset = 0) {
+  const monday = getMondayUTC(offset)
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
+    d.setUTCDate(monday.getUTCDate() + i)
     return d
   })
 }
 
 function formatDay(d) {
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 }
 
 function formatWeekRange(days) {
-  const s = days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-  const e = days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const s = days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  const e = days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
   return `${s} – ${e}`
 }
 
-function matchesFrequency(series, date) {
-  if (series.frequency === 'weekly') return true
-  if (series.frequency === 'biweekly') {
-    const start     = new Date(series.start_date)
-    const msPerWeek = 7 * 24 * 60 * 60 * 1000
-    const weeks     = Math.round((date - start) / msPerWeek)
+function matchesFrequency(s, date) {
+  if (s.frequency === 'weekly') return true
+  if (s.frequency === 'biweekly') {
+    const weeks = Math.round((date - new Date(s.start_date)) / (7*24*60*60*1000))
     return weeks % 2 === 0
   }
-  if (series.frequency === 'monthly') {
-    const start  = new Date(series.start_date)
-    return Math.ceil(start.getDate() / 7) === Math.ceil(date.getDate() / 7)
+  if (s.frequency === 'monthly') {
+    const start = new Date(s.start_date)
+    return Math.ceil(start.getUTCDate()/7) === Math.ceil(date.getUTCDate()/7)
   }
   return true
 }
 
 function resolveSlot(date, period, slots, series) {
-  const dateStr  = toDateStr(date)
+  const dateStr  = toUTCDateStr(date)
   const explicit = slots.find(s => s.date === dateStr && s.period === period)
-  if (explicit) {
-    if (explicit.status === 'deleted') return { status: 'not_set' }
-    return explicit
-  }
-  const rawDay    = date.getDay()
+  if (explicit) return explicit.status === 'deleted' ? { status: 'not_set' } : explicit
+  const rawDay    = date.getUTCDay()
   const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1
-  const match     = series.find(s => {
-    if (s.day_of_week !== dayOfWeek) return false
-    if (s.period !== period)         return false
-    if (dateStr < s.start_date)      return false
-    if (s.end_date && dateStr > s.end_date) return false
-    return matchesFrequency(s, date)
-  })
-  if (match) return { status: match.status, notes: match.notes }
-  return { status: 'not_set' }
+  const match     = series.find(s =>
+    s.day_of_week === dayOfWeek && s.period === period &&
+    dateStr >= s.start_date && (!s.end_date || dateStr <= s.end_date) &&
+    matchesFrequency(s, date)
+  )
+  return match ? { status: match.status, notes: match.notes } : { status: 'not_set' }
+}
+
+function findNextAvailable(slots, series) {
+  const today = new Date()
+  for (let i = 0; i < 90; i++) {
+    const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + i))
+    for (const period of ['morning', 'afternoon']) {
+      const slot = resolveSlot(date, period, slots, series)
+      if (slot.status === 'available') {
+        return {
+          label:  date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
+          period: period === 'morning' ? 'AM' : 'PM',
+        }
+      }
+    }
+  }
+  return null
 }
 
 function SlotTag({ slot, label }) {
   const cfg = STATUS[slot.status] || STATUS.not_set
-  if (slot.status === 'not_set') {
-    return <Text variant="microcopy">{label}: —</Text>
-  }
+  if (slot.status === 'not_set') return <Text variant="microcopy">{label}: —</Text>
   return (
     <Flex direction="column" gap="extra-small">
       <Tag variant={cfg.variant}>{label}: {cfg.label}</Tag>
@@ -93,95 +102,108 @@ function SlotTag({ slot, label }) {
   )
 }
 
-hubspot.extend(({ context, runServerlessFunction }) => (
-  <MediatorCalendar context={context} runServerlessFunction={runServerlessFunction} />
+hubspot.extend(({ context, runServerlessFunction, actions }) => (
+  <MediatorCalendar context={context} runServerlessFunction={runServerlessFunction} actions={actions} />
 ))
 
-function MediatorCalendar({ context, runServerlessFunction }) {
+function MediatorCalendar({ context, runServerlessFunction, actions }) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [data,       setData]       = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState(null)
-  const [requested,  setRequested]  = useState(false)
 
   const hs_object_id = context.crm.objectId
-  const days         = getWeekDays(weekOffset)
-  const date_from    = toDateStr(days[0])
-  const date_to      = toDateStr(days[6])
+  const today        = todayUTC()
 
-  useEffect(() => { fetchData() }, [weekOffset])
+  useEffect(() => {
+    const monday  = getMondayUTC(0)
+    const yearEnd = new Date(monday)
+    yearEnd.setUTCDate(yearEnd.getUTCDate() + 364)
 
-  async function fetchData() {
-    setLoading(true)
-    setError(null)
-    try {
-      const resp = await runServerlessFunction({
-        name:       'getAvailability',
-        parameters: { hs_object_id: String(hs_object_id), date_from, date_to },
-      })
-      if (resp.status === 'SUCCESS') {
-        setData(resp.response.body)
-      } else {
-        setError(resp.message || 'Failed to load availability.')
-      }
-    } catch (e) {
-      setError(e.message)
-    }
-    setLoading(false)
+    runServerlessFunction({
+      name:       'get-availability-function',
+      parameters: {
+        hs_object_id: String(hs_object_id),
+        date_from:    toUTCDateStr(monday),
+        date_to:      toUTCDateStr(yearEnd),
+      },
+    }).then(resp => {
+      if (resp.status === 'SUCCESS') setData(resp.response.body)
+      else setError(resp.response?.message || JSON.stringify(resp))
+    }).catch(e => setError(e.message))
+    .finally(() => setLoading(false))
+  }, [])
+
+  function handleOpenFullCalendar() {
+    const mediatorId = data?.mediator?.id || ''
+    actions.openIframeModal({
+      uri:    `https://cedr-mediator-mvp.team-cd8.workers.dev/?mediator_id=${mediatorId}`,
+      height: 2000,
+      width:  1400,
+      title:  `${data?.mediator?.full_name || 'Mediator'} — Full Calendar`,
+      flush:  false,
+    })
   }
 
-  async function handleRequestUpdate() {
-    try {
-      await hubspot.fetch('https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ hs_object_id, mediator_id: data?.mediator?.id }),
-      })
-    } catch (_) {}
-    setRequested(true)
-    setTimeout(() => setRequested(false), 4000)
-  }
+  const days   = getWeekDaysUTC(weekOffset)
+  const slots  = data?.slots  || []
+  const series = data?.series || []
 
   if (loading) return (
     <Flex justify="center" align="center" gap="small">
-      <LoadingSpinner />
-      <Text>Loading availability…</Text>
+      <LoadingSpinner /><Text>Loading availability…</Text>
     </Flex>
   )
 
   if (error) return (
-    <Flex direction="column" gap="small">
-      <Alert title="Could not load availability" variant="error">{error}</Alert>
-      <Button onClick={fetchData} variant="secondary" size="xs">Retry</Button>
-    </Flex>
+    <Alert title="Could not load availability" variant="error">{error}</Alert>
   )
 
-  const slots  = data?.slots  || []
-  const series = data?.series || []
+  const nextAvailable = findNextAvailable(slots, series)
 
   return (
     <Flex direction="column" gap="small">
-      <Heading>{data?.mediator?.full_name || 'Mediator'} — Availability</Heading>
 
+      {/* Header */}
+      <Flex justify="space-between" align="center">
+        <Heading>{data?.mediator?.full_name || 'Mediator'} — Availability</Heading>
+        <Button onClick={handleOpenFullCalendar} variant="primary" size="xs">
+          Open full calendar
+        </Button>
+      </Flex>
+
+      {/* Next available */}
+      {nextAvailable ? (
+        <Flex align="center" gap="extra-small">
+          <Text variant="microcopy">Next available:</Text>
+          <Tag variant="success">{nextAvailable.label} {nextAvailable.period}</Tag>
+        </Flex>
+      ) : (
+        <Text variant="microcopy">No availability set in the next 90 days</Text>
+      )}
+
+      <Divider />
+
+      {/* Week navigation */}
       <Flex align="center" gap="small">
-        <Button onClick={() => setWeekOffset(o => o - 1)} variant="secondary" size="xs">← Prev</Button>
+        <Button onClick={() => setWeekOffset(o => o-1)} variant="secondary" size="xs">← Prev</Button>
         <Box flex={1}>
           <Text format={{ bold: true }} align="center">{formatWeekRange(days)}</Text>
         </Box>
-        <Button onClick={() => setWeekOffset(o => o + 1)} variant="secondary" size="xs">Next →</Button>
+        <Button onClick={() => setWeekOffset(o => o+1)} variant="secondary" size="xs">Next →</Button>
         <Button onClick={() => setWeekOffset(0)} variant="secondary" size="xs">Today</Button>
       </Flex>
 
       <Divider />
 
+      {/* Week slots */}
       <Flex direction="column" gap="extra-small">
         {days.map(day => {
-          const dateStr = toDateStr(day)
-          const isToday = dateStr === toDateStr(new Date())
+          const dateStr = toUTCDateStr(day)
+          const isToday = dateStr === today
           const am      = resolveSlot(day, 'morning',   slots, series)
           const pm      = resolveSlot(day, 'afternoon', slots, series)
           const empty   = am.status === 'not_set' && pm.status === 'not_set'
-
           return (
             <Box key={dateStr} padding="small">
               <Flex direction="column" gap="extra-small">
@@ -201,22 +223,6 @@ function MediatorCalendar({ context, runServerlessFunction }) {
         })}
       </Flex>
 
-      <Divider />
-
-      <Flex direction="row" gap="extra-small" wrap="wrap">
-        {Object.entries(STATUS).filter(([k]) => k !== 'not_set').map(([k, cfg]) => (
-          <Tag key={k} variant={cfg.variant}>{cfg.label}</Tag>
-        ))}
-      </Flex>
-
-      <Divider />
-
-      <Flex justify="space-between" align="center">
-        <Button onClick={fetchData} variant="secondary" size="xs">Refresh</Button>
-        <Button onClick={handleRequestUpdate} variant="primary" size="xs" disabled={requested}>
-          {requested ? 'Request sent ✓' : 'Request availability update'}
-        </Button>
-      </Flex>
     </Flex>
   )
 }

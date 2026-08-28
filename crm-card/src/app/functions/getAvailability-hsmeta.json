@@ -1,5 +1,1 @@
-{
-  "name": "getAvailability",
-  "uid": "get-availability-function",
-  "type": "app-function"
-}
+{"uid":"get-availability-function","type":"app-function","config":{"entrypoint":"/app/functions/getAvailability.js"}}

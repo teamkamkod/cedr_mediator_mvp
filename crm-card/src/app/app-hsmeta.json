@@ -1,11 +1,1 @@
-{
-  "name": "CEDR Mediator Calendar",
-  "uid": "cedr-mediator-calendar",
-  "type": "app",
-  "config": {
-    "auth": {
-      "type": "static"
-    },
-    "distribution": "private"
-  }
-}
+{"uid":"cedr-mediator-calendar","type":"app","config":{"name":"CEDR Mediator Calendar","description":"Mediator availability calendar for CEDR","auth":{"type":"static","requiredScopes":["crm.objects.custom.read"]},"distribution":"private","permittedUrls":{"fetch":["https://hook.eu1.make.com"],"iframe":["https://cedr-mediator-mvp.team-cd8.workers.dev"],"img":[]}}}
