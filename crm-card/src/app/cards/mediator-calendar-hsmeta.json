@@ -1,0 +1,19 @@
+{
+  "name": "Mediator Availability",
+  "uid": "mediator-availability-card",
+  "type": "card",
+  "config": {
+    "surfaces": [
+      {
+        "type": "crm.record.tab",
+        "data": {
+          "objectTypes": [
+            {
+              "name": "p_mediators"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

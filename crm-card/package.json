@@ -1,0 +1,9 @@
+{
+  "name": "cedr-mediator-card",
+  "version": "1.0.0",
+  "description": "CEDR Mediator Availability CRM Card",
+  "private": true,
+  "dependencies": {
+    "@hubspot/ui-extensions": "latest"
+  }
+}

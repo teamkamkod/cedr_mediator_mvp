@@ -1,0 +1,11 @@
+{
+  "name": "CEDR Mediator Calendar",
+  "uid": "cedr-mediator-calendar",
+  "type": "app",
+  "config": {
+    "auth": {
+      "type": "static"
+    },
+    "distribution": "private"
+  }
+}

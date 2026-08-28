@@ -40,7 +40,7 @@ export function AuthProvider({ children }) {
     if (!activeMediatorId) { setActiveMediatorProfile(null); return }
     supabase
       .from('users')
-      .select('id, full_name, first_name, last_name, email, avatar_url')
+      .select('id, full_name, first_name, last_name, email, avatar_url, hubspot_mediator_object_id')
       .eq('id', activeMediatorId)
       .single()
       .then(({ data }) => setActiveMediatorProfile(data))
