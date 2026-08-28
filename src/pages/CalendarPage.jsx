@@ -6,6 +6,7 @@ import CalendarHeader    from '../components/calendar/CalendarHeader'
 import WeekView          from '../components/calendar/WeekView'
 import MonthView         from '../components/calendar/MonthView'
 import ProvisionalBanner from '../components/calendar/ProvisionalBanner'
+import MediatorPicker    from '../components/calendar/MediatorPicker'
 import { SLOT_STATUSES } from '../lib/constants'
 
 export default function CalendarPage() {
@@ -36,11 +37,7 @@ export default function CalendarPage() {
   const isLoading = slotsLoading || seriesLoading
 
   if (!mediatorId) {
-    return (
-      <div className="flex-1 flex items-center justify-center h-screen text-cedr-muted text-sm">
-        No mediator selected.
-      </div>
-    )
+    return <div className="flex flex-col h-screen"><MediatorPicker /></div>
   }
 
   return (
