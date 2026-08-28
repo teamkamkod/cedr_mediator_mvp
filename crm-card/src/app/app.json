@@ -1,0 +1,15 @@
+{
+  "name": "CEDR Mediator Calendar",
+  "uid": "cedr-mediator-calendar",
+  "scopes": [],
+  "public": false,
+  "extensions": {
+    "crm": {
+      "cards": [
+        {
+          "file": "extensions/mediator-calendar.json"
+        }
+      ]
+    }
+  }
+}
