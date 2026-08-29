@@ -8,7 +8,8 @@ export default function CalendarHeader({
   view, setView, currentDate, setCurrentDate,
   onRequestUpdate, selectMode, onToggleSelectMode, selectedCount,
 }) {
-  const { activeMediatorProfile, isClerk, isSuperAdmin } = useAuth()
+  const { activeMediatorProfile, isClerk, isSuperAdmin, isCRA } = useAuth()
+  const showCTA = (isClerk || isSuperAdmin || isCRA) && activeMediatorProfile
 
   function goToday() { setCurrentDate(new Date()) }
   function goPrev()  { setCurrentDate(prev => view === 'week' ? subWeeks(prev, 1) : subMonths(prev, 1)) }
@@ -24,8 +25,6 @@ export default function CalendarHeader({
     }
     return format(currentDate, 'MMMM yyyy')
   }
-
-  const showCTA = (isClerk || isSuperAdmin) && activeMediatorProfile
 
   return (
     <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-cedr-border">
