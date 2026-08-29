@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays } from 'date-fns'
 import { useAuth } from '../lib/auth'
-import { useSlots, useRecurringSeries, useProvisionalBookings } from '../hooks/useAvailability'
+import { useSlots, useRecurringSeries } from '../hooks/useAvailability'
 import CalendarHeader     from '../components/calendar/CalendarHeader'
 import WeekView           from '../components/calendar/WeekView'
 import MonthView          from '../components/calendar/MonthView'
-import ProvisionalBanner  from '../components/calendar/ProvisionalBanner'
 import MediatorPicker     from '../components/calendar/MediatorPicker'
 import RequestUpdateModal from '../components/calendar/RequestUpdateModal'
 import { SLOT_STATUSES }  from '../lib/constants'
@@ -33,7 +32,6 @@ export default function CalendarPage() {
 
   const { data: slots,  isLoading: slotsLoading }  = useSlots(mediatorId, dateFrom, dateTo)
   const { data: series, isLoading: seriesLoading } = useRecurringSeries(mediatorId)
-  const { data: provisional }                       = useProvisionalBookings(mediatorId)
 
   const isLoading = slotsLoading || seriesLoading
 
@@ -47,8 +45,6 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col h-screen">
-      <ProvisionalBanner bookings={provisional} mediatorId={mediatorId} />
-
       <CalendarHeader
         view={view}
         setView={setView}

@@ -5,12 +5,17 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { clsx } from 'clsx'
 import HelpModal from './HelpModal'
+import ProvisionalBanner from '../calendar/ProvisionalBanner'
+import { useProvisionalBookings } from '../../hooks/useAvailability'
 
 export default function AppLayout() {
   const { profile, isSuperAdmin, isClerk, isMediator, isCRA, isAdmin,
-          clerkAssignments, activeMediatorProfile, setActiveMediatorId } = useAuth()
+          clerkAssignments, activeMediatorProfile, activeMediatorId, setActiveMediatorId } = useAuth()
   const navigate  = useNavigate()
   const [showHelp, setShowHelp] = useState(false)
+
+  // Fetch provisional bookings for the active mediator — shown in banner across all pages
+  const { data: provisional } = useProvisionalBookings(activeMediatorId)
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -27,8 +32,8 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen flex">
+      {/* Sidebar */}
       <aside className="w-60 bg-cedr-navy flex flex-col shrink-0">
-        {/* Logo */}
         <div className="px-6 py-5 border-b border-white/10">
           <img
             src="https://www.cedr.com/hubfs/New_CEDR_2025/Images/CEDR-logo%20White.svg"
@@ -39,7 +44,6 @@ export default function AppLayout() {
           </p>
         </div>
 
-        {/* Active mediator banner */}
         {(isClerk || isSuperAdmin || isCRA) && activeMediatorProfile && (
           <div className="px-4 py-3 bg-white/10 border-b border-white/10">
             <p className="text-white/50 text-[10px] uppercase tracking-wide font-medium mb-1">
@@ -62,7 +66,6 @@ export default function AppLayout() {
           </div>
         )}
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
           <NavItem to="/" icon={<Calendar size={16} />} label="Calendar" end />
           <NavItem to="/profile" icon={<User size={16} />} label="Profile" />
@@ -71,7 +74,6 @@ export default function AppLayout() {
           )}
         </nav>
 
-        {/* Help link */}
         {showHelperLink && (
           <div className="px-4 pb-2">
             <button onClick={() => setShowHelp(true)}
@@ -82,7 +84,6 @@ export default function AppLayout() {
           </div>
         )}
 
-        {/* User footer */}
         <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 mb-3">
             <Avatar profile={profile} size="sm" />
@@ -101,9 +102,15 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
+      {/* Main content with banner at top */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Banner — shown on all pages, resets on navigation (local state) */}
+        <ProvisionalBanner bookings={provisional} mediatorId={activeMediatorId} />
+
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>

@@ -1,50 +1,102 @@
+import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Bell, Check, X } from 'lucide-react'
+import { Bell, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useRespondToBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 
+// Group slots by date: if both AM+PM exist, show as a single full-day request
+function groupBookings(slots) {
+  const byDate = {}
+  for (const slot of slots) {
+    if (!byDate[slot.date]) byDate[slot.date] = []
+    byDate[slot.date].push(slot)
+  }
+
+  return Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, daySlots]) => {
+      const am = daySlots.find(s => s.period === 'morning')
+      const pm = daySlots.find(s => s.period === 'afternoon')
+      if (am && pm) {
+        return { key: `${date}-full`, date, label: 'Full day', slots: [am, pm], isFullDay: true }
+      }
+      return { key: daySlots[0].id, date, label: daySlots[0].period, slots: [daySlots[0]], isFullDay: false }
+    })
+}
+
 export default function ProvisionalBanner({ bookings, mediatorId }) {
+  const [open,      setOpen]      = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
   const respond = useRespondToBooking()
   const { isMediator, isClerk } = useAuth()
 
-  // Only mediators and clerks can respond to bookings
-  if (!bookings?.length || (!isMediator && !isClerk)) return null
+  if (!bookings?.length || (!isMediator && !isClerk) || dismissed) return null
 
-  async function handleAction(slot, action) {
-    await respond.mutateAsync({ slotId: slot.id, mediatorId, action })
+  const groups = groupBookings(bookings)
+
+  async function handleAction(group, action) {
+    // Accept/decline all slots in the group (1 for single, 2 for full-day)
+    await Promise.all(
+      group.slots.map(slot =>
+        respond.mutateAsync({ slotId: slot.id, mediatorId, action })
+      )
+    )
   }
 
   return (
-    <div className="bg-purple-700 text-white px-6 py-3">
-      <div className="flex items-start gap-3">
-        <Bell size={16} className="mt-0.5 shrink-0 animate-pulse" />
-        <div className="flex-1 space-y-2">
-          <p className="text-sm font-semibold">
-            {bookings.length} provisional booking{bookings.length > 1 ? 's' : ''} need{bookings.length === 1 ? 's' : ''} your response
-          </p>
-          {bookings.map(slot => (
-            <div key={slot.id}
-              className="flex items-center justify-between bg-white/10 rounded px-3 py-2">
+    <div className="bg-purple-700 text-white">
+      {/* Collapsed header — always visible */}
+      <div className="flex items-center justify-between px-6 py-2.5">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-2 text-sm font-semibold hover:text-white/80 transition-colors"
+        >
+          <Bell size={14} className={open ? '' : 'animate-pulse'} />
+          {groups.length} provisional request{groups.length > 1 ? 's' : ''} pending
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+        <button
+          onClick={() => setDismissed(true)}
+          className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+          title="Dismiss"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Expanded details */}
+      {open && (
+        <div className="px-6 pb-3 space-y-2 border-t border-white/20 pt-2">
+          {groups.map(group => (
+            <div
+              key={group.key}
+              className="flex items-center justify-between bg-white/10 rounded px-3 py-2"
+            >
               <div className="text-sm">
                 <span className="font-medium">
-                  {slot.case_id ? `Case #${slot.case_id.slice(0, 8)}` : 'Mediation request'}
+                  {group.slots[0].case_id
+                    ? `Case #${group.slots[0].case_id.slice(0, 8)}`
+                    : 'Mediation request'}
                 </span>
                 <span className="text-white/70 ml-2 text-xs">
-                  {format(parseISO(slot.date), 'EEE d MMM')} · {slot.period}
+                  {format(parseISO(group.date), 'EEE d MMM')}
+                  {' · '}
+                  {group.isFullDay ? 'Full day' : group.label}
                 </span>
               </div>
-              <div className="flex gap-2 ml-4">
+              <div className="flex gap-2 ml-4 shrink-0">
                 <button
-                  onClick={() => handleAction(slot, 'decline')}
+                  onClick={() => handleAction(group, 'decline')}
                   disabled={respond.isPending}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-50"
                 >
                   <X size={11} /> Decline
                 </button>
                 <button
-                  onClick={() => handleAction(slot, 'accept')}
+                  onClick={() => handleAction(group, 'accept')}
                   disabled={respond.isPending}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white hover:bg-white/90 text-purple-700 transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white hover:bg-white/90 text-purple-700 transition-colors disabled:opacity-50"
                 >
                   <Check size={11} /> Accept
                 </button>
@@ -52,7 +104,7 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
             </div>
           ))}
         </div>
-      </div>
+      )}
     </div>
   )
 }
