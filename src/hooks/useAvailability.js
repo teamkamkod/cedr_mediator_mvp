@@ -249,7 +249,7 @@ export function useDeactivateSeriesFrom() {
 export function useRespondToBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ slotId, mediatorId, action }) => {
+    mutationFn: async ({ slotId, mediatorId, action, extraPayload = {} }) => {
       if (action === 'accept') {
         const { error } = await supabase
           .from('availability_slots')
@@ -257,7 +257,6 @@ export function useRespondToBooking() {
           .eq('id', slotId)
         if (error) throw error
       } else {
-        // Decline = delete the slot entirely
         const { error } = await supabase
           .from('availability_slots')
           .delete()
@@ -276,8 +275,9 @@ export function useRespondToBooking() {
             event:       action === 'accept'
                            ? 'provisional_booking_confirmed'
                            : 'provisional_booking_declined',
-            slot_id:     slotId,
             mediator_id: mediatorId,
+            slot_id:     slotId,
+            ...extraPayload,
           }),
         }).catch(() => {})
       }

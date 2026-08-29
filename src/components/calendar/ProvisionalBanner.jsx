@@ -23,13 +23,19 @@ function groupBookings(slots) {
 }
 
 // Individual row with inline confirmation
-function GroupRow({ group, mediatorId, respond }) {
-  const [confirming, setConfirming] = useState(null) // null | 'accept' | 'decline'
+function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
+  const [confirming, setConfirming] = useState(null)
 
   async function handleConfirm() {
+    const extraPayload = {
+      hubspot_mediator_object_id: hubspotMediatorId || null,
+      slot_date:   group.date,
+      slot_time:   group.isFullDay ? 'full_day' : group.slots[0].period,
+      case_id:     group.slots[0].case_id || null,
+    }
     await Promise.all(
       group.slots.map(slot =>
-        respond.mutateAsync({ slotId: slot.id, mediatorId, action: confirming })
+        respond.mutateAsync({ slotId: slot.id, mediatorId, action: confirming, extraPayload })
       )
     )
     setConfirming(null)
@@ -109,7 +115,8 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
   const [dismissed, setDismissed] = useState(false)
 
   const respond = useRespondToBooking()
-  const { isMediator, isClerk } = useAuth()
+  const { isMediator, isClerk, activeMediatorProfile } = useAuth()
+  const hubspotMediatorId = activeMediatorProfile?.hubspot_mediator_object_id
 
   if (!bookings?.length || (!isMediator && !isClerk) || dismissed) return null
 
@@ -144,6 +151,7 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
               key={group.key}
               group={group}
               mediatorId={mediatorId}
+              hubspotMediatorId={hubspotMediatorId}
               respond={respond}
             />
           ))}
