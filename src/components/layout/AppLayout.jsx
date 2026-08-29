@@ -33,7 +33,7 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="w-60 bg-cedr-navy flex flex-col shrink-0">
+      <aside className="w-60 bg-cedr-navy flex flex-col shrink-0 min-h-screen sticky top-0">
         <div className="px-6 py-5 border-b border-white/10">
           <img
             src="https://www.cedr.com/hubfs/New_CEDR_2025/Images/CEDR-logo%20White.svg"
