@@ -1,17 +1,15 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Bell, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { useRespondToBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 
-// Group slots by date: if both AM+PM exist, show as a single full-day request
 function groupBookings(slots) {
   const byDate = {}
   for (const slot of slots) {
     if (!byDate[slot.date]) byDate[slot.date] = []
     byDate[slot.date].push(slot)
   }
-
   return Object.entries(byDate)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, daySlots]) => {
@@ -22,6 +20,88 @@ function groupBookings(slots) {
       }
       return { key: daySlots[0].id, date, label: daySlots[0].period, slots: [daySlots[0]], isFullDay: false }
     })
+}
+
+// Individual row with inline confirmation
+function GroupRow({ group, mediatorId, respond }) {
+  const [confirming, setConfirming] = useState(null) // null | 'accept' | 'decline'
+
+  async function handleConfirm() {
+    await Promise.all(
+      group.slots.map(slot =>
+        respond.mutateAsync({ slotId: slot.id, mediatorId, action: confirming })
+      )
+    )
+    setConfirming(null)
+  }
+
+  const dateLabel = format(parseISO(group.date), 'EEE d MMM')
+  const timeLabel = group.isFullDay ? 'Full day' : group.label
+
+  return (
+    <div className="bg-white/10 rounded overflow-hidden">
+      {confirming ? (
+        // Confirmation step
+        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertTriangle size={13} className="text-white/70 shrink-0" />
+            <span>
+              {confirming === 'accept' ? 'Confirm acceptance' : 'Confirm decline'} —{' '}
+              <span className="font-medium">{dateLabel}</span>
+              <span className="text-white/70"> · {timeLabel}</span>
+            </span>
+          </div>
+          <div className="flex gap-1.5 shrink-0">
+            <button
+              onClick={() => setConfirming(null)}
+              className="px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={respond.isPending}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
+                confirming === 'accept'
+                  ? 'bg-white text-purple-700 hover:bg-white/90'
+                  : 'bg-red-500 text-white hover:bg-red-600'
+              }`}
+            >
+              {respond.isPending ? '…' : confirming === 'accept' ? 'Accept' : 'Decline'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        // Default row
+        <div className="px-3 py-2 flex items-center justify-between">
+          <div className="text-sm">
+            <span className="font-medium">
+              {group.slots[0].case_id
+                ? `Case #${group.slots[0].case_id.slice(0, 8)}`
+                : 'Mediation request'}
+            </span>
+            <span className="text-white/70 ml-2 text-xs">
+              {dateLabel} · {timeLabel}
+            </span>
+          </div>
+          <div className="flex gap-2 ml-4 shrink-0">
+            <button
+              onClick={() => setConfirming('decline')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors"
+            >
+              <X size={11} /> Decline
+            </button>
+            <button
+              onClick={() => setConfirming('accept')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white hover:bg-white/90 text-purple-700 transition-colors"
+            >
+              <Check size={11} /> Accept
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ProvisionalBanner({ bookings, mediatorId }) {
@@ -35,18 +115,9 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
 
   const groups = groupBookings(bookings)
 
-  async function handleAction(group, action) {
-    // Accept/decline all slots in the group (1 for single, 2 for full-day)
-    await Promise.all(
-      group.slots.map(slot =>
-        respond.mutateAsync({ slotId: slot.id, mediatorId, action })
-      )
-    )
-  }
-
   return (
-    <div className="bg-purple-700 text-white">
-      {/* Collapsed header — always visible */}
+    <div className="bg-purple-700 text-white shrink-0">
+      {/* Collapsed header */}
       <div className="flex items-center justify-between px-6 py-2.5">
         <button
           onClick={() => setOpen(o => !o)}
@@ -59,7 +130,7 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
         <button
           onClick={() => setDismissed(true)}
           className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-          title="Dismiss"
+          title="Dismiss until next visit"
         >
           <X size={14} />
         </button>
@@ -67,41 +138,14 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
 
       {/* Expanded details */}
       {open && (
-        <div className="px-6 pb-3 space-y-2 border-t border-white/20 pt-2">
+        <div className="px-6 pb-3 space-y-1.5 border-t border-white/20 pt-2">
           {groups.map(group => (
-            <div
+            <GroupRow
               key={group.key}
-              className="flex items-center justify-between bg-white/10 rounded px-3 py-2"
-            >
-              <div className="text-sm">
-                <span className="font-medium">
-                  {group.slots[0].case_id
-                    ? `Case #${group.slots[0].case_id.slice(0, 8)}`
-                    : 'Mediation request'}
-                </span>
-                <span className="text-white/70 ml-2 text-xs">
-                  {format(parseISO(group.date), 'EEE d MMM')}
-                  {' · '}
-                  {group.isFullDay ? 'Full day' : group.label}
-                </span>
-              </div>
-              <div className="flex gap-2 ml-4 shrink-0">
-                <button
-                  onClick={() => handleAction(group, 'decline')}
-                  disabled={respond.isPending}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-50"
-                >
-                  <X size={11} /> Decline
-                </button>
-                <button
-                  onClick={() => handleAction(group, 'accept')}
-                  disabled={respond.isPending}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white hover:bg-white/90 text-purple-700 transition-colors disabled:opacity-50"
-                >
-                  <Check size={11} /> Accept
-                </button>
-              </div>
-            </div>
+              group={group}
+              mediatorId={mediatorId}
+              respond={respond}
+            />
           ))}
         </div>
       )}

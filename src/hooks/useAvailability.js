@@ -250,22 +250,35 @@ export function useRespondToBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ slotId, mediatorId, action }) => {
-      const newStatus = action === 'accept' ? 'confirmed' : 'available'
-      const { error } = await supabase
-        .from('availability_slots')
-        .update({ status: newStatus })
-        .eq('id', slotId)
-      if (error) throw error
-
       if (action === 'accept') {
-        const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
-        if (webhookUrl) {
-          await fetch(webhookUrl, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ event: 'provisional_booking_confirmed', slot_id: slotId, mediator_id: mediatorId }),
-          }).catch(() => {})
-        }
+        const { error } = await supabase
+          .from('availability_slots')
+          .update({ status: 'confirmed' })
+          .eq('id', slotId)
+        if (error) throw error
+      } else {
+        // Decline = delete the slot entirely
+        const { error } = await supabase
+          .from('availability_slots')
+          .delete()
+          .eq('id', slotId)
+        if (error) throw error
+      }
+
+      // Webhook fires for both accept and decline
+      const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
+      if (webhookUrl) {
+        await fetch(webhookUrl, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            event:       action === 'accept'
+                           ? 'provisional_booking_confirmed'
+                           : 'provisional_booking_declined',
+            slot_id:     slotId,
+            mediator_id: mediatorId,
+          }),
+        }).catch(() => {})
       }
     },
     onSuccess: (_, { mediatorId }) => {
