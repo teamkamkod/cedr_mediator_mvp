@@ -9,7 +9,7 @@ export default function CalendarHeader({
   onRequestUpdate, selectMode, onToggleSelectMode, selectedCount,
 }) {
   const { activeMediatorProfile, isClerk, isSuperAdmin, isCRA } = useAuth()
-  const showCTA = (isClerk || isSuperAdmin || isCRA) && activeMediatorProfile
+  const showCTA = (isSuperAdmin || isCRA) && activeMediatorProfile
 
   function goToday() { setCurrentDate(new Date()) }
   function goPrev()  { setCurrentDate(prev => view === 'week' ? subWeeks(prev, 1) : subMonths(prev, 1)) }
