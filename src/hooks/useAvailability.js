@@ -93,11 +93,11 @@ export function useProvisionalBookings(mediatorId) {
   return useQuery({
     queryKey:        ['provisional', mediatorId],
     enabled:         !!mediatorId,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
     queryFn:         async () => {
       const { data, error } = await supabase
         .from('availability_slots')
-        .select('*, cases!case_id(*)')
+        .select('*, cases:case_id(*)')
         .eq('mediator_id', mediatorId)
         .eq('status', 'provisionally_booked')
         .order('date', { ascending: true })
