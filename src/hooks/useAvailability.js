@@ -267,6 +267,7 @@ export function useRespondToBooking() {
 
       // Webhook fires for both accept and decline
       const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
+                      || 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
       if (webhookUrl) {
         await fetch(webhookUrl, {
           method:  'POST',
