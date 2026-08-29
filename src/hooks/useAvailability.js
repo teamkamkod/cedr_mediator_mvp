@@ -97,7 +97,7 @@ export function useProvisionalBookings(mediatorId) {
     queryFn:         async () => {
       const { data, error } = await supabase
         .from('availability_slots')
-        .select('*, cases:case_id(*)')
+        .select('id, date, period, status, notes, case_id, created_by')
         .eq('mediator_id', mediatorId)
         .eq('status', 'provisionally_booked')
         .order('date', { ascending: true })
@@ -173,7 +173,7 @@ export function useCreateProvisionalBooking() {
           mediator_id:                mediatorId,
           hubspot_mediator_object_id: hubspotMediatorId || null,
           slot_date:                  date,
-          slot_period:                fullDay ? 'full_day' : period,
+          slot_time:                  fullDay ? 'full_day' : period,
           send_email:                 sendEmail,
           message:                    message || null,
         }),

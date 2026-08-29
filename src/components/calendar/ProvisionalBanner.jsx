@@ -20,16 +20,14 @@ export default function ProvisionalBanner({ bookings, mediatorId }) {
         <Bell size={16} className="mt-0.5 shrink-0 animate-pulse" />
         <div className="flex-1 space-y-2">
           <p className="text-sm font-semibold">
-            {bookings.length} provisional booking{bookings.length > 1 ? 's' : ''} need your response
+            {bookings.length} provisional booking{bookings.length > 1 ? 's' : ''} need{bookings.length === 1 ? 's' : ''} your response
           </p>
           {bookings.map(slot => (
-            <div
-              key={slot.id}
-              className="flex items-center justify-between bg-white/10 rounded px-3 py-2"
-            >
+            <div key={slot.id}
+              className="flex items-center justify-between bg-white/10 rounded px-3 py-2">
               <div className="text-sm">
                 <span className="font-medium">
-                  {slot.cases?.case_name || `Case #${slot.case_id?.slice(0, 8)}`}
+                  {slot.case_id ? `Case #${slot.case_id.slice(0, 8)}` : 'Mediation request'}
                 </span>
                 <span className="text-white/70 ml-2 text-xs">
                   {format(parseISO(slot.date), 'EEE d MMM')} · {slot.period}
