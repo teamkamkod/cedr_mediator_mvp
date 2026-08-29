@@ -5,26 +5,53 @@ import { useRespondToBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 
 function groupBookings(slots) {
-  const byDate = {}
+  const groups = []
+  const byGroupId = {}
+  const ungrouped = []
+
   for (const slot of slots) {
+    if (slot.group_id) {
+      if (!byGroupId[slot.group_id]) byGroupId[slot.group_id] = []
+      byGroupId[slot.group_id].push(slot)
+    } else {
+      ungrouped.push(slot)
+    }
+  }
+
+  // group_id groups → one entry per group
+  for (const [groupId, groupSlots] of Object.entries(byGroupId)) {
+    const sorted = groupSlots.sort((a, b) => a.date.localeCompare(b.date) || a.period.localeCompare(b.period))
+    const first  = sorted[0].date
+    const last   = sorted[sorted.length - 1].date
+    const label  = first === last
+      ? `${format(parseISO(first), 'EEE d MMM')} (${sorted.length} slots)`
+      : `${format(parseISO(first), 'd MMM')} – ${format(parseISO(last), 'd MMM')} (${sorted.length} slots)`
+    groups.push({ key: groupId, date: first, label, slots: sorted, isGroup: true })
+  }
+
+  // Ungrouped: group by date (AM+PM same day → Full day)
+  const byDate = {}
+  for (const slot of ungrouped) {
     if (!byDate[slot.date]) byDate[slot.date] = []
     byDate[slot.date].push(slot)
   }
-  return Object.entries(byDate)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, daySlots]) => {
-      const am = daySlots.find(s => s.period === 'morning')
-      const pm = daySlots.find(s => s.period === 'afternoon')
-      if (am && pm) {
-        return { key: `${date}-full`, date, label: 'Full day', slots: [am, pm], isFullDay: true }
-      }
-      return { key: daySlots[0].id, date, label: daySlots[0].period, slots: [daySlots[0]], isFullDay: false }
-    })
+  for (const [date, daySlots] of Object.entries(byDate)) {
+    const am = daySlots.find(s => s.period === 'morning')
+    const pm = daySlots.find(s => s.period === 'afternoon')
+    if (am && pm) {
+      groups.push({ key: `${date}-full`, date, label: `${format(parseISO(date), 'EEE d MMM')} · Full day`, slots: [am, pm], isGroup: false })
+    } else {
+      const slot = daySlots[0]
+      groups.push({ key: slot.id, date, label: `${format(parseISO(date), 'EEE d MMM')} · ${slot.period}`, slots: [slot], isGroup: false })
+    }
+  }
+
+  return groups.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 // Individual row with inline confirmation
 function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
-  const [confirming, setConfirming] = useState(null)
+  const [confirming, setConfirming] = useState(null) // null | 'accept' | 'decline'
 
   async function handleConfirm() {
     const extraPayload = {
@@ -47,14 +74,12 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
   return (
     <div className="bg-white/10 rounded overflow-hidden">
       {confirming ? (
-        // Confirmation step
         <div className="px-3 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <AlertTriangle size={13} className="text-white/70 shrink-0" />
             <span>
               {confirming === 'accept' ? 'Confirm acceptance' : 'Confirm decline'} —{' '}
-              <span className="font-medium">{dateLabel}</span>
-              <span className="text-white/70"> · {timeLabel}</span>
+              <span className="font-medium truncate">{group.label}</span>
             </span>
           </div>
           <div className="flex gap-1.5 shrink-0">
@@ -86,9 +111,7 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
                 ? `Case #${group.slots[0].case_id.slice(0, 8)}`
                 : 'Mediation request'}
             </span>
-            <span className="text-white/70 ml-2 text-xs">
-              {dateLabel} · {timeLabel}
-            </span>
+            <span className="text-white/70 ml-2 text-xs">{group.label}</span>
           </div>
           <div className="flex gap-2 ml-4 shrink-0">
             <button

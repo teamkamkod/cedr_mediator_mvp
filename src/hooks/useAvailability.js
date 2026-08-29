@@ -97,12 +97,97 @@ export function useProvisionalBookings(mediatorId) {
     queryFn:         async () => {
       const { data, error } = await supabase
         .from('availability_slots')
-        .select('id, date, period, status, notes, case_id, created_by')
+        .select('id, date, period, status, notes, case_id, created_by, group_id')
         .eq('mediator_id', mediatorId)
         .eq('status', 'provisionally_booked')
         .order('date', { ascending: true })
       if (error) throw error
       return data
+    },
+  })
+}
+
+const MAKE_WEBHOOK = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
+
+// Mediator/clerk: batch upsert N slots with the same status (slots remain independent)
+export function useBatchUpsertSlots() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, slots, status, notes }) => {
+      const userId = (await supabase.auth.getUser()).data.user?.id
+      await Promise.all(
+        slots.map(({ dateStr, period }) =>
+          supabase.from('availability_slots').upsert({
+            mediator_id:  mediatorId,
+            date:         dateStr,
+            period,
+            status,
+            notes:        notes || null,
+            updated_by:   userId,
+            created_by:   userId,
+            group_id:     null,
+          }, { onConflict: 'mediator_id,date,period' })
+        )
+      )
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+function buildSlotSummary(slots) {
+  if (!slots.length) return ''
+  const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+  const first  = sorted[0].dateStr
+  const last   = sorted[sorted.length - 1].dateStr
+  const n      = slots.length
+  if (first === last) return `${first} (${n} slot${n > 1 ? 's' : ''})`
+  return `${first} – ${last} (${n} slots)`
+}
+
+// CRA: batch create provisional bookings with a shared group_id
+export function useBatchCreateProvisionalBooking() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, slots, sendEmail, message, hubspotMediatorId }) => {
+      const userId  = (await supabase.auth.getUser()).data.user?.id
+      const groupId = crypto.randomUUID()
+
+      await Promise.all(
+        slots.map(({ dateStr, period }) =>
+          supabase.from('availability_slots').upsert({
+            mediator_id:  mediatorId,
+            date:         dateStr,
+            period,
+            status:       'provisionally_booked',
+            group_id:     groupId,
+            created_by:   userId,
+            updated_by:   userId,
+          }, { onConflict: 'mediator_id,date,period' })
+        )
+      )
+
+      const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+      await fetch(MAKE_WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          event:                      'request_slot_availability',
+          mediator_id:                mediatorId,
+          hubspot_mediator_object_id: hubspotMediatorId || null,
+          group_id:                   groupId,
+          slots:                      sorted.map(s => ({ date: s.dateStr, slot_time: s.period })),
+          slot_summary:               buildSlotSummary(sorted),
+          send_email:                 sendEmail,
+          message:                    message || null,
+        }),
+      }).catch(() => {})
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
     },
   })
 }
@@ -136,8 +221,6 @@ export function useUpsertSlot() {
     },
   })
 }
-
-const MAKE_WEBHOOK = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
 
 // CRA-specific: create a provisional booking with optional email notification
 export function useCreateProvisionalBooking() {

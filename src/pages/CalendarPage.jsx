@@ -1,21 +1,57 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays } from 'date-fns'
 import { useAuth } from '../lib/auth'
 import { useSlots, useRecurringSeries } from '../hooks/useAvailability'
-import CalendarHeader     from '../components/calendar/CalendarHeader'
-import WeekView           from '../components/calendar/WeekView'
-import MonthView          from '../components/calendar/MonthView'
-import MediatorPicker     from '../components/calendar/MediatorPicker'
-import RequestUpdateModal from '../components/calendar/RequestUpdateModal'
-import { SLOT_STATUSES }  from '../lib/constants'
+import CalendarHeader      from '../components/calendar/CalendarHeader'
+import WeekView            from '../components/calendar/WeekView'
+import MonthView           from '../components/calendar/MonthView'
+import MediatorPicker      from '../components/calendar/MediatorPicker'
+import RequestUpdateModal  from '../components/calendar/RequestUpdateModal'
+import FloatingActionBar   from '../components/calendar/FloatingActionBar'
+import BatchStatusPopover  from '../components/calendar/BatchStatusPopover'
+import CRABatchPopover     from '../components/calendar/CRABatchPopover'
+import { SLOT_STATUSES }   from '../lib/constants'
 
 export default function CalendarPage() {
-  const { activeMediatorId, activeMediatorProfile } = useAuth()
+  const { activeMediatorId, activeMediatorProfile, isCRA } = useAuth()
   const [view, setView]               = useState('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showUpdateModal, setShowUpdateModal] = useState(false)
 
+  // Select mode state
+  const [selectMode,    setSelectMode]    = useState(false)
+  const [selectedSlots, setSelectedSlots] = useState([])
+  const [showBatchPopover, setShowBatchPopover] = useState(false)
+
   const mediatorId = activeMediatorId
+
+  // Exit select mode on Esc
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape' && selectMode) exitSelect()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectMode])
+
+  function exitSelect() {
+    setSelectMode(false)
+    setSelectedSlots([])
+    setShowBatchPopover(false)
+  }
+
+  function toggleSelectMode() {
+    if (selectMode) exitSelect()
+    else { setSelectMode(true); setSelectedSlots([]) }
+  }
+
+  const toggleSlot = useCallback(({ date, dateStr, period, slotData }) => {
+    setSelectedSlots(prev => {
+      const exists = prev.find(s => s.dateStr === dateStr && s.period === period)
+      if (exists) return prev.filter(s => !(s.dateStr === dateStr && s.period === period))
+      return [...prev, { date, dateStr, period, slotData }]
+    })
+  }, [])
 
   const dateFrom = format(
     view === 'week'
@@ -32,25 +68,21 @@ export default function CalendarPage() {
 
   const { data: slots,  isLoading: slotsLoading }  = useSlots(mediatorId, dateFrom, dateTo)
   const { data: series, isLoading: seriesLoading } = useRecurringSeries(mediatorId)
-
   const isLoading = slotsLoading || seriesLoading
 
   if (!mediatorId) {
-    return (
-      <div className="flex flex-col h-screen">
-        <MediatorPicker />
-      </div>
-    )
+    return <div className="flex flex-col h-screen"><MediatorPicker /></div>
   }
 
   return (
     <div className="flex flex-col h-screen">
       <CalendarHeader
-        view={view}
-        setView={setView}
-        currentDate={currentDate}
-        setCurrentDate={setCurrentDate}
+        view={view} setView={setView}
+        currentDate={currentDate} setCurrentDate={setCurrentDate}
         onRequestUpdate={() => setShowUpdateModal(true)}
+        selectMode={selectMode}
+        onToggleSelectMode={toggleSelectMode}
+        selectedCount={selectedSlots.length}
       />
 
       {/* Legend */}
@@ -61,6 +93,11 @@ export default function CalendarPage() {
             <span className="text-xs text-cedr-muted">{meta.label}</span>
           </div>
         ))}
+        {selectMode && (
+          <span className="ml-auto text-xs text-cedr-teal font-medium">
+            Select mode active — click slots to select, Esc to exit
+          </span>
+        )}
       </div>
 
       {isLoading ? (
@@ -68,9 +105,42 @@ export default function CalendarPage() {
           <div className="w-6 h-6 border-2 border-cedr-navy border-t-transparent rounded-full animate-spin" />
         </div>
       ) : view === 'week' ? (
-        <WeekView currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId} />
+        <WeekView
+          currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId}
+          selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
+        />
       ) : (
-        <MonthView currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId} />
+        <MonthView
+          currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId}
+          selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
+        />
+      )}
+
+      {/* Floating action bar — shown when slots are selected */}
+      {selectMode && selectedSlots.length > 0 && (
+        <FloatingActionBar
+          selectedSlots={selectedSlots}
+          onClear={() => setSelectedSlots([])}
+          onAction={() => setShowBatchPopover(true)}
+        />
+      )}
+
+      {/* Batch popovers */}
+      {showBatchPopover && !isCRA && (
+        <BatchStatusPopover
+          selectedSlots={selectedSlots}
+          mediatorId={mediatorId}
+          onClose={() => setShowBatchPopover(false)}
+          onDone={exitSelect}
+        />
+      )}
+      {showBatchPopover && isCRA && (
+        <CRABatchPopover
+          selectedSlots={selectedSlots}
+          mediatorId={mediatorId}
+          onClose={() => setShowBatchPopover(false)}
+          onDone={exitSelect}
+        />
       )}
 
       {showUpdateModal && (
