@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays } from 'date-fns'
 import { useAuth } from '../lib/auth'
+import { useCalendar } from '../lib/CalendarContext'
 import { useSlots, useRecurringSeries } from '../hooks/useAvailability'
 import CalendarHeader      from '../components/calendar/CalendarHeader'
 import WeekView            from '../components/calendar/WeekView'
@@ -14,22 +15,17 @@ import { SLOT_STATUSES }   from '../lib/constants'
 
 export default function CalendarPage() {
   const { activeMediatorId, activeMediatorProfile, isCRA } = useAuth()
-  const [view, setView]               = useState('week')
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [showUpdateModal, setShowUpdateModal] = useState(false)
+  const { currentDate, setCurrentDate, view, setView, showWeekends, setShowWeekends } = useCalendar()
 
-  // Select mode state
-  const [selectMode,    setSelectMode]    = useState(false)
-  const [selectedSlots, setSelectedSlots] = useState([])
+  const [showUpdateModal,  setShowUpdateModal]  = useState(false)
+  const [selectMode,       setSelectMode]       = useState(false)
+  const [selectedSlots,    setSelectedSlots]    = useState([])
   const [showBatchPopover, setShowBatchPopover] = useState(false)
 
   const mediatorId = activeMediatorId
 
-  // Exit select mode on Esc
   useEffect(() => {
-    function onKey(e) {
-      if (e.key === 'Escape' && selectMode) exitSelect()
-    }
+    function onKey(e) { if (e.key === 'Escape' && selectMode) exitSelect() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectMode])
@@ -83,9 +79,10 @@ export default function CalendarPage() {
         selectMode={selectMode}
         onToggleSelectMode={toggleSelectMode}
         selectedCount={selectedSlots.length}
+        showWeekends={showWeekends}
+        onToggleWeekends={() => setShowWeekends(!showWeekends)}
       />
 
-      {/* Legend */}
       <div className="flex items-center gap-4 px-6 py-2 bg-white border-b border-cedr-border">
         {Object.entries(SLOT_STATUSES).filter(([k]) => k !== 'not_set').map(([key, meta]) => (
           <div key={key} className="flex items-center gap-1.5">
@@ -95,7 +92,7 @@ export default function CalendarPage() {
         ))}
         {selectMode && (
           <span className="ml-auto text-xs text-cedr-teal font-medium">
-            Select mode active — click slots to select, Esc to exit
+            Select mode — click slots to select · Esc to exit
           </span>
         )}
       </div>
@@ -108,15 +105,16 @@ export default function CalendarPage() {
         <WeekView
           currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId}
           selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
+          showWeekends={showWeekends}
         />
       ) : (
         <MonthView
           currentDate={currentDate} slots={slots} series={series} mediatorId={mediatorId}
           selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
+          showWeekends={showWeekends}
         />
       )}
 
-      {/* Floating action bar — shown when slots are selected */}
       {selectMode && selectedSlots.length > 0 && (
         <FloatingActionBar
           selectedSlots={selectedSlots}
@@ -125,24 +123,14 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* Batch popovers */}
       {showBatchPopover && !isCRA && (
-        <BatchStatusPopover
-          selectedSlots={selectedSlots}
-          mediatorId={mediatorId}
-          onClose={() => setShowBatchPopover(false)}
-          onDone={exitSelect}
-        />
+        <BatchStatusPopover selectedSlots={selectedSlots} mediatorId={mediatorId}
+          onClose={() => setShowBatchPopover(false)} onDone={exitSelect} />
       )}
       {showBatchPopover && isCRA && (
-        <CRABatchPopover
-          selectedSlots={selectedSlots}
-          mediatorId={mediatorId}
-          onClose={() => setShowBatchPopover(false)}
-          onDone={exitSelect}
-        />
+        <CRABatchPopover selectedSlots={selectedSlots} mediatorId={mediatorId}
+          onClose={() => setShowBatchPopover(false)} onDone={exitSelect} />
       )}
-
       {showUpdateModal && (
         <RequestUpdateModal
           mediatorName={activeMediatorProfile?.full_name}

@@ -8,7 +8,7 @@ import { useAuth } from '../../lib/auth'
 
 const BOOKABLE_STATUSES = ['not_set', 'available']
 
-export default function CRASlotPopover({ slot, date, period, mediatorId, onClose }) {
+export default function CRASlotPopover({ slot, date, period, mediatorId, onClose, readOnly = false }) {
   const [fullDay,       setFullDay]       = useState(false)
   const [sendEmail,     setSendEmail]     = useState(false)
   const [message,       setMessage]       = useState('')
@@ -23,9 +23,72 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
   const isProvisional = slot?.status === 'provisionally_booked'
   const isConfirmed   = slot?.status === 'confirmed'
   const isReadOnly    = !canBook && !isProvisional
+  const canDelete    = isProvisional && slot?.created_by === profile?.id
 
-  // CRA can delete their own provisional bookings
-  const canDelete = isProvisional && slot?.created_by === profile?.id
+  // Past read-only view: show status + allow delete of own provisional bookings
+  if (readOnly) {
+    const meta = SLOT_STATUSES[slot?.status] || SLOT_STATUSES.not_set
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
+        <div ref={ref} onClick={e => e.stopPropagation()}
+          className="bg-white rounded-lg shadow-popover border border-cedr-border w-80 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
+            <div>
+              <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
+              <p className="text-xs text-cedr-muted capitalize">{period} · Past</p>
+            </div>
+            <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light">
+              <X size={14} className="text-cedr-muted" />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            {slot?.status === 'provisionally_booked' ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded">
+                <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-purple-800">Provisional Booking</p>
+                  <p className="text-xs text-purple-600">Past slot</p>
+                </div>
+              </div>
+            ) : (
+              <div className={clsx('inline-flex items-center gap-2 px-3 py-1.5 rounded border text-sm font-medium', meta.color)}>
+                {meta.label}
+              </div>
+            )}
+            {slot?.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
+            <p className="text-xs text-cedr-muted/60">Past slots are read-only.</p>
+          </div>
+          <div className="flex gap-2 px-4 pb-4">
+            {canDelete && (
+              <button onClick={() => setConfirmDelete(true)}
+                className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
+                title="Cancel this booking">
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
+          </div>
+
+          {/* Delete confirmation for past provisional */}
+          {confirmDelete && (
+            <div className="absolute inset-0 bg-white flex flex-col p-5 gap-4">
+              <p className="text-sm font-medium text-red-700 flex items-center gap-2">
+                <Trash2 size={15} />
+                Cancel this provisional booking?
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmDelete(false)} className="btn-secondary flex-1 text-xs">Back</button>
+                <button onClick={handleDelete} disabled={deleteSlot.isPending}
+                  className="flex-1 text-xs px-4 py-2 rounded font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50">
+                  {deleteSlot.isPending ? 'Cancelling…' : 'Cancel booking'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   useEffect(() => {
     function handle(e) {

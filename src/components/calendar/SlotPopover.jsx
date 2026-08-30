@@ -9,7 +9,7 @@ import {
 } from '../../hooks/useAvailability'
 
 // step: 'edit' | 'confirm_series_edit' | 'confirm_delete' | 'confirm_delete_series'
-export default function SlotPopover({ slot, date, period, mediatorId, onClose }) {
+export default function SlotPopover({ slot, date, period, mediatorId, onClose, readOnly = false }) {
   const [step, setStep]         = useState('edit')
   const [status, setStatus]     = useState(slot?.status || 'not_set')
   const [notes, setNotes]       = useState(slot?.notes  || '')
@@ -38,6 +38,38 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose })
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
+
+  // ── Read-only view (past slots) ───────────────────────────
+  if (readOnly) {
+    const meta = SLOT_STATUSES[slot?.status] || SLOT_STATUSES.not_set
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
+        <div ref={ref} onClick={e => e.stopPropagation()}
+          className="bg-white rounded-lg shadow-popover border border-cedr-border w-72 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
+            <div>
+              <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
+              <p className="text-xs text-cedr-muted capitalize">{period} · Past</p>
+            </div>
+            <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light">
+              <X size={14} className="text-cedr-muted" />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className={clsx('inline-flex items-center gap-2 px-3 py-1.5 rounded border text-sm font-medium', meta.color)}>
+              <div className={`w-2 h-2 rounded-full ${meta.dot}`} />
+              {meta.label || 'Not set'}
+            </div>
+            {slot?.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
+            <p className="text-xs text-cedr-muted/60">Past slots are read-only.</p>
+          </div>
+          <div className="px-4 pb-4">
+            <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ── Save ──────────────────────────────────────────────────
   async function handleSave() {

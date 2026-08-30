@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle, Eye } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useRespondToBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
+import { useCalendar } from '../../lib/CalendarContext'
 
 function groupBookings(slots) {
   const groups = []
@@ -51,7 +53,9 @@ function groupBookings(slots) {
 
 // Individual row with inline confirmation
 function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
-  const [confirming, setConfirming] = useState(null) // null | 'accept' | 'decline'
+  const [confirming, setConfirming] = useState(null)
+  const { setCurrentDate } = useCalendar()
+  const navigate = useNavigate()
 
   async function handleConfirm() {
     const extraPayload = {
@@ -66,6 +70,11 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
       )
     )
     setConfirming(null)
+  }
+
+  function handleView() {
+    setCurrentDate(parseISO(group.date))
+    navigate('/')
   }
 
   const dateLabel = format(parseISO(group.date), 'EEE d MMM')
@@ -114,16 +123,16 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
             <span className="text-white/70 ml-2 text-xs">{group.label}</span>
           </div>
           <div className="flex gap-2 ml-4 shrink-0">
-            <button
-              onClick={() => setConfirming('decline')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors"
-            >
+            <button onClick={handleView}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/10 hover:bg-white/20 transition-colors">
+              <Eye size={11} /> View
+            </button>
+            <button onClick={() => setConfirming('decline')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors">
               <X size={11} /> Decline
             </button>
-            <button
-              onClick={() => setConfirming('accept')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white hover:bg-white/90 text-purple-700 transition-colors"
-            >
+            <button onClick={() => setConfirming('accept')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-white hover:bg-white/90 text-purple-700 transition-colors">
               <Check size={11} /> Accept
             </button>
           </div>

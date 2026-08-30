@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { useEffect } from 'react'
 import { useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
+import { CalendarProvider } from './lib/CalendarContext'
 import LoginPage          from './pages/LoginPage'
 import SetPasswordPage    from './pages/SetPasswordPage'
 import CalendarPage       from './pages/CalendarPage'
@@ -51,8 +52,9 @@ function LoadingScreen() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthCallbackHandler />
-      <Routes>
+      <CalendarProvider>
+        <AuthCallbackHandler />
+        <Routes>
         <Route path="/login"           element={<LoginPage />} />
         <Route path="/set-password"    element={<SetPasswordPage />} />
         <Route path="/select-mediator" element={<MediatorSelectPage />} />
@@ -71,7 +73,8 @@ export default function App() {
           } />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
+      </CalendarProvider>
     </BrowserRouter>
   )
 }

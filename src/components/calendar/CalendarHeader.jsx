@@ -1,5 +1,5 @@
 import { format, addWeeks, subWeeks, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns'
-import { ChevronLeft, ChevronRight, Bell, MousePointerClick } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Bell, MousePointerClick, CalendarDays } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../lib/auth'
 import { Avatar } from '../layout/AppLayout'
@@ -7,9 +7,9 @@ import { Avatar } from '../layout/AppLayout'
 export default function CalendarHeader({
   view, setView, currentDate, setCurrentDate,
   onRequestUpdate, selectMode, onToggleSelectMode, selectedCount,
+  showWeekends, onToggleWeekends,
 }) {
-  const { activeMediatorProfile, isClerk, isSuperAdmin, isCRA } = useAuth()
-  const showCTA = (isSuperAdmin || isCRA) && activeMediatorProfile
+  const { activeMediatorProfile, isSuperAdmin, isCRA } = useAuth()
 
   function goToday() { setCurrentDate(new Date()) }
   function goPrev()  { setCurrentDate(prev => view === 'week' ? subWeeks(prev, 1) : subMonths(prev, 1)) }
@@ -26,10 +26,12 @@ export default function CalendarHeader({
     return format(currentDate, 'MMMM yyyy')
   }
 
+  const showCTA = (isSuperAdmin || isCRA) && activeMediatorProfile
+
   return (
     <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-cedr-border">
 
-      {/* Left: view toggle + select button */}
+      {/* Left: view toggle + select */}
       <div className="flex items-center gap-2 shrink-0">
         <div className="flex items-center gap-1 bg-cedr-light rounded p-1">
           {['week', 'month'].map(v => (
@@ -42,21 +44,15 @@ export default function CalendarHeader({
             </button>
           ))}
         </div>
-
-        <button
-          onClick={onToggleSelectMode}
-          title={selectMode ? 'Exit select mode (Esc)' : 'Select multiple slots'}
+        <button onClick={onToggleSelectMode} title={selectMode ? 'Exit select mode (Esc)' : 'Select multiple slots'}
           className={clsx(
             'flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium border transition-all',
             selectMode
               ? 'bg-cedr-navy text-white border-cedr-navy'
               : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30 hover:text-cedr-navy'
-          )}
-        >
+          )}>
           <MousePointerClick size={13} />
-          {selectMode
-            ? selectedCount > 0 ? `${selectedCount} selected` : 'Selecting…'
-            : 'Select'}
+          {selectMode ? selectedCount > 0 ? `${selectedCount} selected` : 'Selecting…' : 'Select'}
         </button>
       </div>
 
@@ -72,26 +68,35 @@ export default function CalendarHeader({
         <h2 className="text-base font-semibold text-cedr-navy truncate ml-1">{getTitle()}</h2>
       </div>
 
-      {/* Right: mediator badge + request update CTA */}
+      {/* Right: mediator badge + request update + weekends toggle */}
       <div className="flex items-center gap-3 shrink-0">
         {showCTA && activeMediatorProfile && (
           <div className="flex items-center gap-2 bg-cedr-light border border-cedr-border rounded px-3 py-1.5">
             <Avatar profile={activeMediatorProfile} size="sm" />
             <div>
-              <p className="text-xs font-semibold text-cedr-navy leading-tight">
-                {activeMediatorProfile.full_name}
-              </p>
+              <p className="text-xs font-semibold text-cedr-navy leading-tight">{activeMediatorProfile.full_name}</p>
               <p className="text-[10px] text-cedr-muted leading-tight">Mediator calendar</p>
             </div>
           </div>
         )}
         {showCTA && (
-          <button onClick={onRequestUpdate}
-            className="flex items-center gap-1.5 btn-secondary text-xs px-3 py-1.5 shrink-0">
+          <button onClick={onRequestUpdate} className="flex items-center gap-1.5 btn-secondary text-xs px-3 py-1.5 shrink-0">
             <Bell size={12} />
             Request update
           </button>
         )}
+
+        {/* Weekends toggle — far right */}
+        <button onClick={onToggleWeekends} title={showWeekends ? 'Hide weekends' : 'Show weekends'}
+          className={clsx(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border transition-all shrink-0',
+            !showWeekends
+              ? 'bg-cedr-navy text-white border-cedr-navy'
+              : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30 hover:text-cedr-navy'
+          )}>
+          <CalendarDays size={12} />
+          {showWeekends ? 'Mon–Sun' : 'Mon–Fri'}
+        </button>
       </div>
     </div>
   )
