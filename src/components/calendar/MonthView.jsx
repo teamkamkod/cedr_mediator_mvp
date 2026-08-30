@@ -34,7 +34,7 @@ function SlotBar({ slot, period, onClick, selected, selectMode }) {
   return (
     <button onClick={onClick}
       className={clsx(
-        'w-full flex items-center gap-1 px-1.5 py-1 rounded border transition-all text-left hover:opacity-80',
+        'flex-1 w-full flex items-center gap-1 px-1.5 border-b last:border-b-0 border-white/30 transition-all text-left hover:opacity-80',
         selected ? selectedStyle : statusStyles[slot.status],
         selectMode && !selected && 'cursor-cell'
       )}>
@@ -53,7 +53,7 @@ function MergedBar({ slot, onClick, selected, selectMode }) {
   return (
     <button onClick={onClick}
       className={clsx(
-        'w-full flex items-center gap-1 px-1.5 py-2 rounded border transition-all text-left hover:opacity-80',
+        'flex-1 w-full flex items-center gap-1 px-1.5 transition-all text-left hover:opacity-80',
         selected ? selectedStyle : statusStyles[slot.status],
         selectMode && !selected && 'cursor-cell'
       )}>
@@ -115,21 +115,21 @@ export default function MonthView({ currentDate, slots, series, mediatorId, sele
           return (
             <div key={day.toISOString()}
               className={clsx(
-                'relative min-h-[80px] p-1 pt-0 border-r border-b border-cedr-border last:border-r-0',
+                'relative min-h-[80px] border-r border-b border-cedr-border last:border-r-0 overflow-hidden',
                 !inMonth && 'bg-cedr-light/40',
               )}>
 
-              {/* Day number — absolute top-left, sits above slots */}
+              {/* Day number — absolute top-right, overlays the slots */}
               <span className={clsx(
-                'absolute top-1 left-1 z-10 text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full',
+                'absolute top-1 right-1 z-10 text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full pointer-events-none',
                 isToday(day)  ? 'bg-cedr-navy text-white' :
-                inMonth       ? 'bg-white/80 text-cedr-text' : 'text-cedr-muted/40'
+                inMonth       ? 'bg-white/80 text-cedr-text backdrop-blur-sm' : 'text-cedr-muted/40'
               )}>
                 {format(day, 'd')}
               </span>
 
-              {/* Slots — take full height, small top padding for the number */}
-              <div className="flex flex-col gap-0.5 mt-6">
+              {/* Slots — fill the entire card height */}
+              <div className="flex flex-col h-full">
                 {merged ? (
                   <MergedBar slot={amSlot}
                     onClick={() => handleCellClick(day, 'morning')}
