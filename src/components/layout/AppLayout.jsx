@@ -34,7 +34,8 @@ export default function AppLayout() {
     const byDate    = new Set(slots.filter(s => !s.group_id).map(s => s.date))
     return groupIds.size + byDate.size
   }
-  const pendingCount = (isMediator || isClerk) ? countPendingGroups(provisional) : 0
+  const pendingCount   = (isMediator || isClerk) ? countPendingGroups(provisional) : 0
+  const showHelperLink = isMediator || isClerk
   const showSwitch     = (isSuperAdmin || isCRA) || (clerkAssignments?.length > 1)
 
   return (
