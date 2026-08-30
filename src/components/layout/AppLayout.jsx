@@ -27,7 +27,14 @@ export default function AppLayout() {
     navigate(isSuperAdmin || isCRA ? '/' : '/select-mediator', { replace: true })
   }
 
-  const showHelperLink = isMediator || isClerk
+  // Count pending requests for badge (mediator/clerk only)
+  function countPendingGroups(slots) {
+    if (!slots?.length) return 0
+    const groupIds  = new Set(slots.filter(s => s.group_id).map(s => s.group_id))
+    const byDate    = new Set(slots.filter(s => !s.group_id).map(s => s.date))
+    return groupIds.size + byDate.size
+  }
+  const pendingCount = (isMediator || isClerk) ? countPendingGroups(provisional) : 0
   const showSwitch     = (isSuperAdmin || isCRA) || (clerkAssignments?.length > 1)
 
   return (
@@ -67,7 +74,7 @@ export default function AppLayout() {
         )}
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          <NavItem to="/" icon={<Calendar size={16} />} label="Calendar" end />
+          <NavItem to="/" icon={<Calendar size={16} />} label="Calendar" end badge={pendingCount} />
           <NavItem to="/profile" icon={<User size={16} />} label="Profile" />
           {isAdmin && (
             <NavItem to="/admin" icon={<Shield size={16} />} label="Admin" />
@@ -117,7 +124,7 @@ export default function AppLayout() {
   )
 }
 
-function NavItem({ to, icon, label, end }) {
+function NavItem({ to, icon, label, end, badge = 0 }) {
   return (
     <NavLink to={to} end={end}
       className={({ isActive }) =>
@@ -126,7 +133,13 @@ function NavItem({ to, icon, label, end }) {
           isActive ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/10'
         )
       }>
-      {icon}{label}
+      {icon}
+      <span className="flex-1">{label}</span>
+      {badge > 0 && (
+        <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </NavLink>
   )
 }

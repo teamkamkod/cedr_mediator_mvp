@@ -115,7 +115,7 @@ export default function MonthView({ currentDate, slots, series, mediatorId, sele
           return (
             <div key={day.toISOString()}
               className={clsx(
-                'relative min-h-[80px] border-r border-b border-cedr-border last:border-r-0 overflow-hidden',
+                'relative min-h-[100px] border-r border-b border-cedr-border last:border-r-0 overflow-hidden',
                 !inMonth && 'bg-cedr-light/40',
               )}>
 

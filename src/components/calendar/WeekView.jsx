@@ -126,6 +126,17 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
         })}
       </div>
 
+      {/* Empty week hint — shown when all slots are not_set and not in select mode */}
+      {!selectMode && days.every(day =>
+        resolveSlot(day, 'morning',   slots, series).status === 'not_set' &&
+        resolveSlot(day, 'afternoon', slots, series).status === 'not_set'
+      ) && (
+        <div className="flex flex-col items-center justify-center py-12 text-cedr-muted gap-2">
+          <p className="text-sm font-medium">No availability set for this week</p>
+          <p className="text-xs">Click any AM or PM slot to get started</p>
+        </div>
+      )}
+
       {popover && !selectMode && (
         isCRA ? (
           <CRASlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
