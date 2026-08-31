@@ -33,12 +33,12 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
   async function handleBook() {
     await createBatch.mutateAsync({
       mediatorId,
-      slots:            sorted.map(s => ({ dateStr: s.dateStr, period: s.period })),
+      slots:             sorted.map(s => ({ dateStr: s.dateStr, period: s.period })),
       sendEmail,
-      message:          sendEmail ? message : null,
+      message:           sendEmail ? message : null,
       hubspotMediatorId: activeMediatorProfile?.hubspot_mediator_object_id,
     })
-    onDone()
+    onDone({ mediatorName: activeMediatorProfile?.full_name, slots: sorted })
   }
 
   return (

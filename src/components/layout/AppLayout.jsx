@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Calendar, User, Shield, LogOut, RefreshCw, HelpCircle } from 'lucide-react'
+import { Calendar, User, Shield, LogOut, RefreshCw, HelpCircle, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { clsx } from 'clsx'
@@ -76,6 +76,9 @@ export default function AppLayout() {
 
         <nav className="flex-1 px-3 py-4 space-y-1">
           <NavItem to="/" icon={<Calendar size={16} />} label="Calendar" end badge={pendingCount} />
+          {(isSuperAdmin || isCRA) && (
+            <NavItem to="/availability" icon={<Search size={16} />} label="Search available mediators" />
+          )}
           <NavItem to="/profile" icon={<User size={16} />} label="Profile" />
           {isAdmin && (
             <NavItem to="/admin" icon={<Shield size={16} />} label="Admin" />
