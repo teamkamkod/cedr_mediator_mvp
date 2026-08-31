@@ -1,9 +1,25 @@
 import { format, parseISO } from 'date-fns'
-import { Check } from 'lucide-react'
+import { Check, Calendar } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../lib/auth'
+import { useCalendar } from '../../lib/CalendarContext'
 
 export default function BookingConfirmModal({ booking, onClose }) {
-  const { mediatorName, slots } = booking
+  const { mediator, slots } = booking
   const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.period.localeCompare(b.period))
+
+  const { setActiveMediatorId } = useAuth()
+  const { setCurrentDate }      = useCalendar()
+  const navigate                = useNavigate()
+
+  function handleViewCalendar() {
+    // Set the CRA's active mediator to the booked one
+    setActiveMediatorId(mediator.id)
+    // Focus the calendar on the first booked slot's date
+    if (sorted.length > 0) setCurrentDate(parseISO(sorted[0].dateStr))
+    navigate('/')
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
@@ -13,7 +29,7 @@ export default function BookingConfirmModal({ booking, onClose }) {
             <Check size={22} />
           </div>
           <p className="text-base font-semibold">Provisional booking confirmed</p>
-          <p className="text-sm text-white/70 mt-1">{mediatorName}</p>
+          <p className="text-sm text-white/70 mt-1">{mediator.full_name}</p>
         </div>
 
         <div className="p-5 space-y-2">
@@ -35,8 +51,10 @@ export default function BookingConfirmModal({ booking, onClose }) {
         </div>
 
         <div className="px-5 pb-5">
-          <button onClick={onClose} className="btn-primary w-full text-sm">
-            Back to availability search
+          <button onClick={handleViewCalendar}
+            className="btn-primary w-full text-sm flex items-center justify-center gap-2">
+            <Calendar size={14} />
+            View {mediator.full_name}'s calendar
           </button>
         </div>
       </div>

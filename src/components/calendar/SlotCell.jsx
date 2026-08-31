@@ -11,7 +11,7 @@ const statusStyles = {
   not_set:              'bg-white border-cedr-border text-cedr-muted/50 hover:bg-cedr-light hover:border-cedr-muted/30',
 }
 
-export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false }) {
+export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false }) {
   const { status = 'not_set', source, cases } = slotData || {}
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
 
@@ -37,7 +37,7 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
   }
 
   return (
-    <div className="relative">
+    <div className={clsx('relative', dimmed && 'opacity-40')}>
       <button onClick={onClick}
         className={clsx(
           'w-full flex flex-col gap-1 px-3 py-3 border rounded transition-all text-left group',
@@ -68,8 +68,8 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
           </span>
         )}
       </button>
-      {past && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none" />}
-      {highlighted && <div className="absolute inset-0 rounded ring-2 ring-cedr-navy ring-offset-1 pointer-events-none" />}
+      {past       && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none z-10" />}
+      {highlighted && <div className="absolute inset-0 rounded border-2 border-cedr-navy pointer-events-none z-20" />}
     </div>
   )
 }

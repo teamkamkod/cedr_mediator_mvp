@@ -142,10 +142,14 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                 <>
                   <SlotCell slotData={amSlot} period="morning"
                     onClick={() => handleCellClick(day, 'morning')}
-                    selectMode={selectMode} selected={amSel} past={past} highlighted={amHigh} />
+                    selectMode={selectMode} selected={amSel} past={past}
+                    highlighted={amHigh}
+                    dimmed={highlightedSlots.length > 0 && !amHigh && !amSel} />
                   <SlotCell slotData={pmSlot} period="afternoon"
                     onClick={() => handleCellClick(day, 'afternoon')}
-                    selectMode={selectMode} selected={pmSel} past={past} highlighted={pmHigh} />
+                    selectMode={selectMode} selected={pmSel} past={past}
+                    highlighted={pmHigh}
+                    dimmed={highlightedSlots.length > 0 && !pmHigh && !pmSel} />
                 </>
               )}
             </div>

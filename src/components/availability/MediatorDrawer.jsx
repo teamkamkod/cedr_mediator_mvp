@@ -78,7 +78,7 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
     setHighlightedSlots([])
     setBookingSource(null)
     if (details && onBookingCreated) {
-      onBookingCreated({ mediatorName: mediator.full_name, slots: details.slots || [] })
+      onBookingCreated({ mediator, slots: details.slots || [] })
     }
   }
 
