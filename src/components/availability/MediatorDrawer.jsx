@@ -92,12 +92,19 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
 
   const slotsForBooking = bookingSource === 'highlighted' ? highlightedSlots : selectedSlots
 
+  const isEmpty = highlightedSlots.length === 0
+
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col">
       {/* Drawer header */}
       <div className="flex items-center gap-4 px-6 py-3 bg-cedr-navy text-white border-b border-white/10 shrink-0 flex-wrap gap-y-2">
         <button onClick={onBack}
-          className="flex items-center gap-1.5 text-white/70 hover:text-white transition-colors text-sm font-medium shrink-0">
+          className={clsx(
+            'flex items-center gap-1.5 text-sm font-medium transition-all shrink-0',
+            isEmpty
+              ? 'text-amber-300 animate-pulse font-semibold'
+              : 'text-white/70 hover:text-white'
+          )}>
           <ArrowLeft size={15} />
           Back to list
         </button>
@@ -132,12 +139,19 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
 
         <div className="flex-1" />
 
-        {/* Book highlighted slots CTA */}
-        {canBook && highlightedSlots.length > 0 && (
+        {/* Book highlighted slots CTA — hidden when all deselected */}
+        {canBook && !isEmpty && highlightedSlots.length > 0 && (
           <button onClick={() => openBooking('highlighted')}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold bg-purple-500 hover:bg-purple-400 text-white transition-colors shrink-0">
-            Book {highlightedSlots.length} highlighted slot{highlightedSlots.length > 1 ? 's' : ''}
+            Book {highlightedSlots.length} slot{highlightedSlots.length > 1 ? 's' : ''}
           </button>
+        )}
+
+        {/* Empty state hint */}
+        {isEmpty && (
+          <span className="text-amber-300 text-xs font-medium animate-pulse">
+            All slots deselected — go back to select different slots
+          </span>
         )}
 
         {/* Select mode toggle */}
@@ -177,7 +191,7 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
             selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
             showWeekends={showWeekends}
             highlightedSlots={highlightedSlots}
-            onToggleHighlight={highlightedSlots.length > 0 && !selectMode ? toggleHighlight : null}
+            onToggleHighlight={!isEmpty && !selectMode ? toggleHighlight : null}
           />
         ) : (
           <MonthView

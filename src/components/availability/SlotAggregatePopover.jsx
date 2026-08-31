@@ -46,7 +46,7 @@ const BADGE = {
 
 export default function SlotAggregatePopover({
   date, period, mediators, slotsByMediator, seriesByMediator,
-  rangeSlots, onClose, onViewMediator,
+  selectedSlots, onClose, onViewMediator,
 }) {
   const ref = useRef()
 
@@ -58,12 +58,12 @@ export default function SlotAggregatePopover({
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
-  const hasRange = rangeSlots.length > 0
+  const hasSelection = selectedSlots.length > 0
 
   // Build mediator list
   const mediatorRows = mediators.map(m => {
-    if (hasRange) {
-      const info = getMediatorRangeInfo(m, rangeSlots, slotsByMediator, seriesByMediator)
+    if (hasSelection) {
+      const info = getMediatorRangeInfo(m, selectedSlots, slotsByMediator, seriesByMediator)
       if (!info) return null
       return { mediator: m, badge: info.badge, notes: info.notes }
     } else {
@@ -77,7 +77,7 @@ export default function SlotAggregatePopover({
     }
   }).filter(Boolean)
 
-  const title = hasRange
+  const title = hasSelection
     ? `Mediators available for selection`
     : `${format(date, 'EEE d MMM')} · ${period === 'morning' ? 'AM' : 'PM'}`
 
@@ -120,7 +120,7 @@ export default function SlotAggregatePopover({
                     {/* Notes per slot */}
                     {notes.map((n, i) => (
                       <p key={i} className="text-xs text-cedr-muted mt-1 italic">
-                        {hasRange && (
+                        {hasSelection && (
                           <span className="font-medium not-italic text-cedr-text/60">
                             {format(parseISO(n.dateStr), 'd MMM')} {n.period === 'morning' ? 'AM' : 'PM'} ·{' '}
                           </span>

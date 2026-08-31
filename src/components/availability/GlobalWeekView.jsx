@@ -1,4 +1,4 @@
-import { startOfWeek, endOfWeek, eachDayOfInterval, format, isToday, parseISO } from 'date-fns'
+import { startOfWeek, endOfWeek, eachDayOfInterval, format, isToday } from 'date-fns'
 import { clsx } from 'clsx'
 import { Check } from 'lucide-react'
 import { resolveSlot } from '../../hooks/useAvailability'
@@ -27,24 +27,23 @@ function computeAggregate(date, period, mediators, slotsByMediator, seriesByMedi
   return 'none'
 }
 
-function isInRange(dateStr, period, rangeSlots) {
-  return rangeSlots.some(s => s.dateStr === dateStr && s.period === period)
+function isSelected(dateStr, period, selectedSlots) {
+  return selectedSlots.some(s => s.dateStr === dateStr && s.period === period)
 }
 
 export default function GlobalWeekView({
   currentDate, mediators, slotsByMediator, seriesByMediator,
-  showWeekends, rangeSlots, onCellClick, onToggleRangeSlot,
+  showWeekends, selectedSlots, onToggleSelectedSlot, onCellClick,
 }) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd   = endOfWeek(currentDate,   { weekStartsOn: 1 })
   let   days      = eachDayOfInterval({ start: weekStart, end: weekEnd })
   if (!showWeekends) days = days.filter(d => d.getDay() !== 0 && d.getDay() !== 6)
   const colCount = days.length
-  const hasRange = rangeSlots.length > 0
 
   return (
     <div className="flex-1 overflow-auto">
-      {/* Headers */}
+      {/* Day headers */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
         className="border-b border-cedr-border bg-white sticky top-0 z-10">
         {days.map(day => (
@@ -61,32 +60,29 @@ export default function GlobalWeekView({
         ))}
       </div>
 
-      {/* Grid */}
+      {/* Slot grid */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
         {days.map(day => {
           const dateStr = format(day, 'yyyy-MM-dd')
           return (
             <div key={day.toISOString()} className="border-r border-cedr-border last:border-r-0 p-2 space-y-2">
               {['morning', 'afternoon'].map(period => {
-                const agg      = computeAggregate(day, period, mediators, slotsByMediator, seriesByMediator)
-                const cfg      = AGGREGATE[agg]
-                const inRange  = isInRange(dateStr, period, rangeSlots)
+                const agg       = computeAggregate(day, period, mediators, slotsByMediator, seriesByMediator)
+                const cfg       = AGGREGATE[agg]
                 const clickable = agg !== 'none'
-                // Dimmed: range is active AND this slot is not in range but is clickable
-                const dimmed   = hasRange && !inRange && clickable
+                const selected  = isSelected(dateStr, period, selectedSlots)
 
                 return (
                   <div key={period} className="relative">
-                    {/* Main cell */}
+                    {/* Main cell — click opens mediator popover */}
                     <button
-                      disabled={agg === 'none'}
+                      disabled={!clickable}
                       onClick={() => clickable && onCellClick(day, period)}
                       className={clsx(
                         'w-full flex flex-col gap-1 px-3 py-3 border rounded transition-all text-left min-h-[90px]',
                         cfg.bg,
                         clickable ? 'hover:opacity-80 cursor-pointer' : 'cursor-default',
-                        inRange && 'border-cedr-navy border-2',
-                        dimmed && 'opacity-50',
+                        selected  && 'border-cedr-navy border-2',
                       )}
                     >
                       <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">
@@ -97,19 +93,19 @@ export default function GlobalWeekView({
                       </span>
                     </button>
 
-                    {/* Checkbox — visible when range is active and slot is clickable */}
-                    {hasRange && clickable && (
+                    {/* Checkbox — on all clickable cells */}
+                    {clickable && (
                       <button
-                        onClick={e => { e.stopPropagation(); onToggleRangeSlot(dateStr, period) }}
+                        onClick={e => { e.stopPropagation(); onToggleSelectedSlot(dateStr, period) }}
                         className={clsx(
-                          'absolute top-1.5 right-1.5 z-20 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
-                          inRange
-                            ? 'bg-cedr-navy border-cedr-navy'
-                            : 'border-cedr-muted/50 bg-white hover:border-cedr-navy/60'
+                          'absolute top-1.5 right-1.5 z-20 w-4 h-4 rounded border-2 flex items-center justify-center transition-all',
+                          selected
+                            ? 'bg-cedr-navy border-cedr-navy hover:bg-cedr-navy/80'
+                            : 'border-cedr-muted/50 bg-white hover:border-cedr-navy/70 hover:bg-cedr-light'
                         )}
-                        title={inRange ? 'Remove from selection' : 'Add to selection'}
+                        title={selected ? 'Deselect slot' : 'Select slot'}
                       >
-                        {inRange && <Check size={9} className="text-white" />}
+                        {selected && <Check size={9} className="text-white" />}
                       </button>
                     )}
                   </div>

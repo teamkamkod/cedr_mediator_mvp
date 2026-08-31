@@ -1,77 +1,38 @@
-import { useState, useMemo, useEffect } from 'react'
-import { format, addWeeks, subWeeks, parseISO, addDays, startOfWeek, endOfWeek } from 'date-fns'
+import { useState, useMemo } from 'react'
+import { format, addWeeks, subWeeks, parseISO, startOfWeek, endOfWeek } from 'date-fns'
 import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCalendar } from '../lib/CalendarContext'
 import { useAllMediators, useAllSeries, useGlobalSlots } from '../hooks/useGlobalAvailability'
-import GlobalWeekView    from '../components/availability/GlobalWeekView'
+import GlobalWeekView       from '../components/availability/GlobalWeekView'
 import SlotAggregatePopover from '../components/availability/SlotAggregatePopover'
-import MediatorDrawer    from '../components/availability/MediatorDrawer'
-import DateRangeFilter   from '../components/availability/DateRangeFilter'
-import BookingConfirmModal from '../components/availability/BookingConfirmModal'
-
-// Build array of {dateStr, period} for a range, excluding weekends
-function buildRangeSlots(start, end) {
-  if (!start?.dateStr || !end?.dateStr || start.dateStr > end.dateStr) return []
-  const slots = []
-  let current = parseISO(start.dateStr)
-  const endDate = parseISO(end.dateStr)
-
-  while (current <= endDate) {
-    const day     = current.getDay()
-    const dateStr = format(current, 'yyyy-MM-dd')
-    const isFirst = dateStr === start.dateStr
-    const isLast  = dateStr === end.dateStr
-
-    if (day !== 0 && day !== 6) {
-      const periods = []
-      if (isFirst && isLast) {
-        if (start.period === 'morning')   periods.push('morning')
-        if (end.period   === 'afternoon') periods.push('afternoon')
-        if (start.period === 'afternoon') periods.push('afternoon')
-      } else if (isFirst) {
-        if (start.period === 'morning') periods.push('morning', 'afternoon')
-        else periods.push('afternoon')
-      } else if (isLast) {
-        if (end.period === 'afternoon') periods.push('morning', 'afternoon')
-        else periods.push('morning')
-      } else {
-        periods.push('morning', 'afternoon')
-      }
-      periods.forEach(p => slots.push({ dateStr, period: p }))
-    }
-    current = addDays(current, 1)
-  }
-  return slots
-}
+import MediatorDrawer       from '../components/availability/MediatorDrawer'
+import BookingConfirmModal  from '../components/availability/BookingConfirmModal'
 
 export default function AvailabilityPage() {
   const { showWeekends } = useCalendar()
-  const queryClient = useQueryClient()
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const queryClient      = useQueryClient()
+
+  const [currentDate,   setCurrentDate]   = useState(new Date())
   const [showWithNoData, setShowWithNoData] = useState(false)
-  const [rangeStart, setRangeStart] = useState(null)
-  const [rangeEnd,   setRangeEnd]   = useState(null)
-  const [popover,    setPopover]     = useState(null) // { date, period }
-  const [drawer,     setDrawer]      = useState(null) // { mediator, preselectedSlots }
+  const [selectedSlots, setSelectedSlots]  = useState([]) // {dateStr, period}
+  const [popover,        setPopover]        = useState(null) // {date, period}
+  const [drawer,         setDrawer]         = useState(null) // {mediator, preselectedSlots}
   const [bookingConfirm, setBookingConfirm] = useState(null)
 
   const { data: mediators = [], isLoading: loadingMediators } = useAllMediators()
-
   const mediatorIds = useMemo(() => mediators.map(m => m.id), [mediators])
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
-  const weekEnd   = endOfWeek(currentDate, { weekStartsOn: 1 })
+  const weekEnd   = endOfWeek(currentDate,   { weekStartsOn: 1 })
   const dateFrom  = format(weekStart, 'yyyy-MM-dd')
-  const dateTo    = format(weekEnd, 'yyyy-MM-dd')
+  const dateTo    = format(weekEnd,   'yyyy-MM-dd')
 
   const { data: allSlots  = [], isLoading: loadingSlots }  = useGlobalSlots(mediatorIds, dateFrom, dateTo)
   const { data: allSeries = [], isLoading: loadingSeries } = useAllSeries(mediatorIds)
-
   const isLoading = loadingMediators || loadingSlots || loadingSeries
 
-  // Index slots and series by mediator_id for fast lookup
   const slotsByMediator = useMemo(() => {
     const map = {}
     for (const s of allSlots) {
@@ -90,7 +51,6 @@ export default function AvailabilityPage() {
     return map
   }, [allSeries])
 
-  // Filter mediators with no data if toggle is off
   const visibleMediators = useMemo(() => {
     if (showWithNoData) return mediators
     return mediators.filter(m =>
@@ -98,31 +58,12 @@ export default function AvailabilityPage() {
     )
   }, [mediators, slotsByMediator, seriesByMediator, showWithNoData])
 
-  // rangeSlots is mutable: initialized from date pickers, toggled by clicking cells
-  const [rangeSlots, setRangeSlots] = useState([])
-  const rangeValid = rangeStart?.dateStr && rangeEnd?.dateStr && rangeStart.dateStr <= rangeEnd.dateStr
-
-  // Reset rangeSlots when date pickers change
-  useEffect(() => {
-    setRangeSlots(rangeValid ? buildRangeSlots(rangeStart, rangeEnd) : [])
-  }, [rangeStart?.dateStr, rangeStart?.period, rangeEnd?.dateStr, rangeEnd?.period])
-
-  // Auto-navigate to start date when range is set
-  useEffect(() => {
-    if (rangeStart?.dateStr) setCurrentDate(parseISO(rangeStart.dateStr))
-  }, [rangeStart?.dateStr])
-
-  function toggleRangeSlot(dateStr, period) {
-    setRangeSlots(prev => {
+  function toggleSelectedSlot(dateStr, period) {
+    setSelectedSlots(prev => {
       const exists = prev.some(s => s.dateStr === dateStr && s.period === period)
       if (exists) return prev.filter(s => !(s.dateStr === dateStr && s.period === period))
       return [...prev, { dateStr, period }]
     })
-  }
-
-  function handleRangeChange(key, value) {
-    if (key === 'start') setRangeStart(value)
-    else setRangeEnd(value)
   }
 
   function handleCellClick(date, period) {
@@ -130,16 +71,22 @@ export default function AvailabilityPage() {
   }
 
   function handleViewMediator(mediator) {
-    const preselected = rangeSlots.length > 0
-      ? rangeSlots.map(s => ({ date: parseISO(s.dateStr), dateStr: s.dateStr, period: s.period, slotData: {} }))
+    const preselected = selectedSlots.length > 0
+      ? selectedSlots.map(s => ({ date: parseISO(s.dateStr), dateStr: s.dateStr, period: s.period, slotData: {} }))
       : [{ date: popover.date, dateStr: format(popover.date, 'yyyy-MM-dd'), period: popover.period, slotData: {} }]
 
-    const initialDate = rangeSlots.length > 0
-      ? parseISO(rangeSlots[0].dateStr)
+    const initialDate = selectedSlots.length > 0
+      ? parseISO(selectedSlots[0].dateStr)
       : popover?.date
 
     setPopover(null)
     setDrawer({ mediator, initialDate, preselectedSlots: preselected })
+  }
+
+  function handleBookingCreated(details) {
+    setDrawer(null)
+    setSelectedSlots([])
+    setBookingConfirm(details)
   }
 
   function handleConfirmClose() {
@@ -147,16 +94,7 @@ export default function AvailabilityPage() {
     setBookingConfirm(null)
   }
 
-  function handleBookingCreated(details) {
-    setDrawer(null)
-    setBookingConfirm(details)
-  }
-
-  const weekLabel = (() => {
-    const s = format(weekStart, 'd MMM')
-    const e = format(weekEnd, 'd MMM yyyy')
-    return `${s} – ${e}`
-  })()
+  const weekLabel = `${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`
 
   return (
     <div className="flex flex-col h-screen relative">
@@ -172,17 +110,16 @@ export default function AvailabilityPage() {
           </button>
           <h2 className="text-base font-semibold text-cedr-navy ml-2">{weekLabel}</h2>
         </div>
-
         <div className="flex-1" />
-
-        {/* Mediator count */}
         <span className="text-xs text-cedr-muted">
           {visibleMediators.length} mediator{visibleMediators.length !== 1 ? 's' : ''}
         </span>
-
-        {/* Show/hide no-data mediators */}
-        <button
-          onClick={() => setShowWithNoData(v => !v)}
+        {selectedSlots.length > 0 && (
+          <span className="text-xs font-semibold text-cedr-navy bg-cedr-light border border-cedr-border px-3 py-1.5 rounded">
+            {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} selected
+          </span>
+        )}
+        <button onClick={() => setShowWithNoData(v => !v)}
           className={clsx(
             'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border transition-all',
             showWithNoData
@@ -194,20 +131,12 @@ export default function AvailabilityPage() {
         </button>
       </div>
 
-      {/* Date range filter */}
-      <DateRangeFilter
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        onChange={handleRangeChange}
-        onClear={() => { setRangeStart(null); setRangeEnd(null) }}
-      />
-
       {/* Legend */}
       <div className="flex items-center gap-6 px-6 py-2 bg-white border-b border-cedr-border shrink-0">
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-green-200 border border-green-300" /><span className="text-xs text-cedr-muted">Availability</span></div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-green-50  border border-green-200" /><span className="text-xs text-cedr-muted">Potential</span></div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-red-50    border border-red-200"   /><span className="text-xs text-cedr-muted">No availability</span></div>
-        {rangeSlots.length > 0 && <span className="ml-auto text-xs text-cedr-teal font-medium">📌 Range active — {rangeSlots.length} slot{rangeSlots.length !== 1 ? 's' : ''} selected</span>}
+        <span className="text-xs text-cedr-muted ml-2">— Check slots to filter by selection, then click a cell to see available mediators</span>
       </div>
 
       {/* Grid */}
@@ -229,9 +158,9 @@ export default function AvailabilityPage() {
           slotsByMediator={slotsByMediator}
           seriesByMediator={seriesByMediator}
           showWeekends={showWeekends}
-          rangeSlots={rangeSlots}
+          selectedSlots={selectedSlots}
+          onToggleSelectedSlot={toggleSelectedSlot}
           onCellClick={handleCellClick}
-          onToggleRangeSlot={toggleRangeSlot}
         />
       )}
 
@@ -243,13 +172,13 @@ export default function AvailabilityPage() {
           mediators={visibleMediators}
           slotsByMediator={slotsByMediator}
           seriesByMediator={seriesByMediator}
-          rangeSlots={rangeSlots}
+          selectedSlots={selectedSlots}
           onClose={() => setPopover(null)}
           onViewMediator={handleViewMediator}
         />
       )}
 
-      {/* Mediator drawer */}
+      {/* Drawer */}
       {drawer && (
         <MediatorDrawer
           mediator={drawer.mediator}
@@ -262,10 +191,7 @@ export default function AvailabilityPage() {
 
       {/* Booking confirmation */}
       {bookingConfirm && (
-        <BookingConfirmModal
-          booking={bookingConfirm}
-          onClose={handleConfirmClose}
-        />
+        <BookingConfirmModal booking={bookingConfirm} onClose={handleConfirmClose} />
       )}
     </div>
   )
