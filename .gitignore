@@ -4,3 +4,4 @@ dist
 .env.local
 .DS_Store
 *.log
+cedr-case-card/src/app/functions/getCaseInfo.js

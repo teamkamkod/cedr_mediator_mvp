@@ -50,7 +50,7 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-6 bg-black/20" onClick={onClose}>
       <div ref={ref} onClick={e => e.stopPropagation()}
-        className="bg-white rounded-xl shadow-popover border border-cedr-border w-full max-w-sm mb-4 overflow-hidden">
+        className="bg-white rounded-xl shadow-popover border border-cedr-border w-full max-w-2xl mb-4 overflow-hidden">
 
         <div className="flex items-center justify-between px-5 py-4 border-b border-cedr-border">
           <div>

@@ -1,58 +1,47 @@
-import React from 'react'
-import {
-  Flex, Text, Heading, Button, Divider, Tag, hubspot,
-} from '@hubspot/ui-extensions'
+import React, { useState, useEffect } from 'react'
+import { Flex, Text, Heading, Button, Divider, Tag, LoadingSpinner, Alert, hubspot } from '@hubspot/ui-extensions'
 
 const PWA_URL = 'https://cedr-mediator-mvp.team-cd8.workers.dev'
 
-hubspot.extend(({ context, actions }) => (
-  <CaseDealCard context={context} actions={actions} />
+hubspot.extend(({ context, runServerlessFunction, actions }) => (
+  <CaseDealCard context={context} runServerlessFunction={runServerlessFunction} actions={actions} />
 ))
 
-function CaseDealCard({ context, actions }) {
-  // Properties defined in hsmeta are available directly — no serverless function needed
-  const props     = context.crm.objectProperties
-  const case_id   = props?.enquiry_id   || null
-  const deal_name = props?.dealname     || null
-  const record_id = String(context.crm.objectId)
+function CaseDealCard({ context, runServerlessFunction, actions }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    runServerlessFunction({
+      name: 'get-case-info-function',
+      parameters: { hs_object_id: String(context.crm.objectId), object_type: 'deal' },
+    }).then(resp => {
+      if (resp.status === 'SUCCESS') setData(resp.response.body)
+      else setError(resp.response?.message || 'Error')
+    }).catch(e => setError(e.message)).finally(() => setLoading(false))
+  }, [])
 
   function handleOpen() {
-    if (!case_id) return
-    const params = new URLSearchParams({
-      case_id,
-      record_id,
-      object_type: 'deal',
-      record_name: deal_name || '',
-    })
-    actions.openIframeModal({
-      uri:    `${PWA_URL}/availability?${params.toString()}`,
-      height: 2000,
-      width:  1400,
-      title:  `Search mediators — ${deal_name || case_id}`,
-      flush:  false,
-    })
+    if (!data?.case_id) return
+    const p = new URLSearchParams({ case_id: data.case_id, record_id: String(context.crm.objectId), object_type: 'deal', record_name: data.record_name || '' })
+    actions.openIframeModal({ uri: `${PWA_URL}/availability?${p}`, height: 2000, width: 1400, title: `Search mediators — ${data.record_name || data.case_id}`, flush: false })
   }
+
+  if (loading) return <Flex justify="center" align="center" gap="small"><LoadingSpinner /><Text>Loading…</Text></Flex>
+  if (error)   return <Alert title="Error" variant="error">{error}</Alert>
 
   return (
     <Flex direction="column" gap="small">
       <Heading>Search available mediators</Heading>
       <Divider />
-
       <Flex align="center" gap="small">
         <Tag variant="info">Case</Tag>
-        <Text format={{ bold: true }}>{deal_name || 'Untitled'}</Text>
+        <Text format={{ bold: true }}>{data?.record_name || 'Untitled'}</Text>
       </Flex>
-
-      {case_id
-        ? <Text variant="microcopy">Case ID: {case_id}</Text>
-        : <Text variant="microcopy">No enquiry_id set on this deal.</Text>
-      }
-
+      {data?.case_id ? <Text variant="microcopy">ID: {data.case_id}</Text> : <Text variant="microcopy">No enquiry_id set on this deal.</Text>}
       <Divider />
-
-      <Button onClick={handleOpen} variant="primary" disabled={!case_id}>
-        Search available mediators
-      </Button>
+      <Button onClick={handleOpen} variant="primary" disabled={!data?.case_id}>Search available mediators</Button>
     </Flex>
   )
 }

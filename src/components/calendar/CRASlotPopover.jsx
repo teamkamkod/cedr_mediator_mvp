@@ -36,7 +36,7 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
         <div ref={ref} onClick={e => e.stopPropagation()}
-          className="bg-white rounded-lg shadow-popover border border-cedr-border w-80 overflow-hidden">
+          className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
             <div>
               <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
@@ -127,7 +127,7 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
       <div ref={ref} onClick={e => e.stopPropagation()}
-        className="bg-white rounded-lg shadow-popover border border-cedr-border w-80 overflow-hidden">
+        className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-2xl overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
