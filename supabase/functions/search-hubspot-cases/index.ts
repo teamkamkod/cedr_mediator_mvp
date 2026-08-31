@@ -9,6 +9,16 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function makeFilters(propertyName: string, value: string, isId: boolean) {
+  if (isId) {
+    return [
+      { filters: [{ propertyName, operator: 'EQ', value }] },
+      { filters: [{ propertyName, operator: 'CONTAINS_TOKEN', value }] },
+    ]
+  }
+  return [{ filters: [{ propertyName, operator: 'CONTAINS_TOKEN', value }] }]
+}
+
 async function hsSearch(objectType: string, filterGroups: unknown[], properties: string[]) {
   const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectType}/search`, {
     method: 'POST',
@@ -42,12 +52,12 @@ serve(async (req) => {
 
     const [ticketsRes, dealsRes] = await Promise.all([
       hsSearch('tickets', [
-        { filters: [{ propertyName: 'enquiry_number_auto_generated', operator: 'CONTAINS_TOKEN', value: q }] },
-        { filters: [{ propertyName: 'subject', operator: 'CONTAINS_TOKEN', value: q }] },
+        ...makeFilters('enquiry_number_auto_generated', q, true),
+        ...makeFilters('subject', q, false),
       ], ['subject', 'enquiry_number_auto_generated']),
       hsSearch('deals', [
-        { filters: [{ propertyName: 'enquiry_id', operator: 'CONTAINS_TOKEN', value: q }] },
-        { filters: [{ propertyName: 'dealname', operator: 'CONTAINS_TOKEN', value: q }] },
+        ...makeFilters('enquiry_id', q, true),
+        ...makeFilters('dealname', q, false),
       ], ['dealname', 'enquiry_id']),
     ])
 
