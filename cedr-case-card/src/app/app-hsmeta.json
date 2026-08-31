@@ -1,0 +1,1 @@
+{"uid":"cedr-case-card","type":"app","config":{"name":"CEDR Case Search","description":"Search available mediators from a deal or ticket","auth":{"type":"static","requiredScopes":["crm.objects.deals.read","crm.objects.tickets.read"]},"distribution":"private","permittedUrls":{"fetch":["https://api.hubapi.com"],"iframe":["https://cedr-mediator-mvp.team-cd8.workers.dev"],"img":[]}}}

@@ -97,7 +97,7 @@ export function useProvisionalBookings(mediatorId) {
     queryFn:         async () => {
       const { data, error } = await supabase
         .from('availability_slots')
-        .select('id, date, period, status, notes, case_id, created_by, group_id')
+        .select('id, date, period, status, notes, case_id, created_by, group_id, hubspot_record_id, hubspot_object_type, record_name')
         .eq('mediator_id', mediatorId)
         .eq('status', 'provisionally_booked')
         .order('date', { ascending: true })
@@ -151,20 +151,24 @@ function buildSlotSummary(slots) {
 export function useBatchCreateProvisionalBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ mediatorId, slots, sendEmail, message, hubspotMediatorId }) => {
+    mutationFn: async ({ mediatorId, slots, sendEmail, message, hubspotMediatorId, caseData }) => {
       const userId  = (await supabase.auth.getUser()).data.user?.id
       const groupId = crypto.randomUUID()
 
       await Promise.all(
         slots.map(({ dateStr, period }) =>
           supabase.from('availability_slots').upsert({
-            mediator_id:  mediatorId,
-            date:         dateStr,
+            mediator_id:          mediatorId,
+            date:                 dateStr,
             period,
-            status:       'provisionally_booked',
-            group_id:     groupId,
-            created_by:   userId,
-            updated_by:   userId,
+            status:               'provisionally_booked',
+            group_id:             groupId,
+            created_by:           userId,
+            updated_by:           userId,
+            case_id:              caseData?.case_id              || null,
+            hubspot_record_id:    caseData?.record_id            || null,
+            hubspot_object_type:  caseData?.object_type          || null,
+            record_name:          caseData?.record_name          || null,
           }, { onConflict: 'mediator_id,date,period' })
         )
       )
@@ -182,6 +186,10 @@ export function useBatchCreateProvisionalBooking() {
           slot_summary:               buildSlotSummary(sorted),
           send_email:                 sendEmail,
           message:                    message || null,
+          case_id:                    caseData?.case_id     || null,
+          hubspot_record_id:          caseData?.record_id   || null,
+          hubspot_object_type:        caseData?.object_type || null,
+          record_name:                caseData?.record_name || null,
         }),
       }).catch(() => {})
     },
@@ -226,7 +234,7 @@ export function useUpsertSlot() {
 export function useCreateProvisionalBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ mediatorId, date, period, fullDay, sendEmail, message, hubspotMediatorId }) => {
+    mutationFn: async ({ mediatorId, date, period, fullDay, sendEmail, message, hubspotMediatorId, caseData }) => {
       const userId   = (await supabase.auth.getUser()).data.user?.id
       const periods  = fullDay ? ['morning', 'afternoon'] : [period]
 
@@ -234,20 +242,23 @@ export function useCreateProvisionalBooking() {
         const { error } = await supabase
           .from('availability_slots')
           .upsert({
-            mediator_id:  mediatorId,
+            mediator_id:         mediatorId,
             date,
-            period:       p,
-            status:       'provisionally_booked',
-            notes:        null,
-            series_id:    null,
-            is_exception: false,
-            updated_by:   userId,
-            created_by:   userId,
+            period:              p,
+            status:              'provisionally_booked',
+            notes:               null,
+            series_id:           null,
+            is_exception:        false,
+            updated_by:          userId,
+            created_by:          userId,
+            case_id:             caseData?.case_id     || null,
+            hubspot_record_id:   caseData?.record_id   || null,
+            hubspot_object_type: caseData?.object_type || null,
+            record_name:         caseData?.record_name || null,
           }, { onConflict: 'mediator_id,date,period' })
         if (error) throw error
       }
 
-      // Fire Make webhook
       await fetch(MAKE_WEBHOOK, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,8 +270,12 @@ export function useCreateProvisionalBooking() {
           slot_time:                  fullDay ? 'full_day' : period,
           send_email:                 sendEmail,
           message:                    message || null,
+          case_id:                    caseData?.case_id     || null,
+          hubspot_record_id:          caseData?.record_id   || null,
+          hubspot_object_type:        caseData?.object_type || null,
+          record_name:                caseData?.record_name || null,
         }),
-      }).catch(() => {}) // non-blocking
+      }).catch(() => {})
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })

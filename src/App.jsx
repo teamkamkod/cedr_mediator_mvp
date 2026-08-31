@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { CalendarProvider } from './lib/CalendarContext'
+import { CaseProvider }    from './lib/CaseContext'
 import LoginPage          from './pages/LoginPage'
 import SetPasswordPage    from './pages/SetPasswordPage'
 import CalendarPage       from './pages/CalendarPage'
@@ -54,6 +55,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <CalendarProvider>
+        <CaseProvider>
         <AuthCallbackHandler />
         <Routes>
         <Route path="/login"           element={<LoginPage />} />
@@ -76,6 +78,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </CaseProvider>
       </CalendarProvider>
     </BrowserRouter>
   )

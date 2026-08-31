@@ -5,6 +5,8 @@ import { clsx } from 'clsx'
 import { SLOT_STATUSES } from '../../lib/constants'
 import { useCreateProvisionalBooking, useDeleteSlot } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
+import { useCase } from '../../lib/CaseContext'
+import CaseDropdown from '../case/CaseDropdown'
 
 const BOOKABLE_STATUSES = ['not_set', 'available']
 
@@ -15,15 +17,18 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const { activeMediatorProfile, profile } = useAuth()
+  const { selectedCase } = useCase()
+  const [localCase, setLocalCase] = useState(selectedCase)
   const createBooking = useCreateProvisionalBooking()
   const deleteSlot    = useDeleteSlot()
   const ref           = useRef()
 
-  const canBook      = BOOKABLE_STATUSES.includes(slot?.status || 'not_set')
+  const canBookSlot  = BOOKABLE_STATUSES.includes(slot?.status || 'not_set')
   const isProvisional = slot?.status === 'provisionally_booked'
   const isConfirmed   = slot?.status === 'confirmed'
-  const isReadOnly    = !canBook && !isProvisional
+  const isReadOnly    = !canBookSlot && !isProvisional
   const canDelete    = isProvisional && slot?.created_by === profile?.id
+  const canBook      = canBookSlot && !!localCase // requires case selection
 
   // Past read-only view: show status + allow delete of own provisional bookings
   if (readOnly) {
@@ -107,6 +112,7 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
       sendEmail,
       message:           sendEmail ? message : null,
       hubspotMediatorId: activeMediatorProfile?.hubspot_mediator_object_id,
+      caseData:          localCase,
     })
     onClose()
   }
@@ -159,7 +165,7 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
           <div className="p-4 space-y-4">
 
             {/* Booking form */}
-            {canBook && (
+            {canBookSlot && (
               <>
                 {/* Explicit "Provisional Booking" label */}
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded">
@@ -168,11 +174,14 @@ export default function CRASlotPopover({ slot, date, period, mediatorId, onClose
                     <p className="text-sm font-semibold text-purple-800">Provisional Booking</p>
                     <p className="text-xs text-purple-600">
                       {slot?.status === 'available'
-                        ? 'This slot is currently Available — booking will mark it as Provisional'
-                        : 'This slot has no availability set — booking will mark it as Provisional'}
+                        ? 'Available — booking will mark it as Provisional'
+                        : 'No availability set — booking will mark it as Provisional'}
                     </p>
                   </div>
                 </div>
+
+                {/* Case selection — mandatory */}
+                <CaseDropdown onChange={setLocalCase} />
 
                 {/* Full day toggle */}
                 <label className={clsx(

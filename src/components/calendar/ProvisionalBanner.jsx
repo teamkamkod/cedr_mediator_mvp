@@ -60,9 +60,12 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
   async function handleConfirm() {
     const extraPayload = {
       hubspot_mediator_object_id: hubspotMediatorId || null,
-      slot_date:   group.date,
-      slot_time:   group.isFullDay ? 'full_day' : group.slots[0].period,
-      case_id:     group.slots[0].case_id || null,
+      slot_date:           group.date,
+      slot_time:           group.isFullDay ? 'full_day' : group.slots[0].period,
+      case_id:             group.slots[0].case_id             || null,
+      hubspot_record_id:   group.slots[0].hubspot_record_id   || null,
+      hubspot_object_type: group.slots[0].hubspot_object_type || null,
+      record_name:         group.slots[0].record_name         || null,
     }
     await Promise.all(
       group.slots.map(slot =>

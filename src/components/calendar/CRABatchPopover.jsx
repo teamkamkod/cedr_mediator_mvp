@@ -3,12 +3,16 @@ import { X, Mail } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useBatchCreateProvisionalBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
+import { useCase } from '../../lib/CaseContext'
 import { format, parseISO } from 'date-fns'
+import CaseDropdown from '../case/CaseDropdown'
 
 export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, onDone, mediatorOverride = null }) {
   const [sendEmail, setSendEmail] = useState(false)
   const [message,   setMessage]   = useState('')
   const { activeMediatorProfile } = useAuth()
+  const { selectedCase }          = useCase()
+  const [localCase, setLocalCase] = useState(selectedCase) // may be pre-filled from CRM context
   const effectiveProfile = mediatorOverride || activeMediatorProfile
   const createBatch = useBatchCreateProvisionalBooking()
   const ref         = useRef()
@@ -21,9 +25,9 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
-  // Build a human-readable summary of the selected slots
   const sorted = [...selectedSlots].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.period.localeCompare(b.period))
   const count  = sorted.length
+  const canBook = !!localCase
 
   function slotLabel(s) {
     const d = format(parseISO(s.dateStr), 'EEE d MMM')
@@ -38,6 +42,7 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
       sendEmail,
       message:           sendEmail ? message : null,
       hubspotMediatorId: effectiveProfile?.hubspot_mediator_object_id,
+      caseData:          localCase,
     })
     onDone({ mediatorName: effectiveProfile?.full_name, slots: sorted })
   }
@@ -61,8 +66,11 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Case selection — mandatory */}
+          <CaseDropdown onChange={setLocalCase} />
+
           {/* Slot summary */}
-          <div className="bg-purple-50 border border-purple-200 rounded px-3 py-2.5 space-y-1 max-h-32 overflow-y-auto">
+          <div className="bg-purple-50 border border-purple-200 rounded px-3 py-2.5 space-y-1 max-h-28 overflow-y-auto">
             {sorted.map(s => (
               <p key={`${s.dateStr}-${s.period}`} className="text-xs text-purple-700 font-medium">
                 {slotLabel(s)}
@@ -99,7 +107,7 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
 
         <div className="flex gap-2 px-5 pb-5">
           <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
-          <button onClick={handleBook} disabled={createBatch.isPending}
+          <button onClick={handleBook} disabled={createBatch.isPending || !canBook}
             className="flex-1 text-sm px-4 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50">
             {createBatch.isPending ? 'Booking…' : `Book ${count} slot${count > 1 ? 's' : ''}`}
           </button>
