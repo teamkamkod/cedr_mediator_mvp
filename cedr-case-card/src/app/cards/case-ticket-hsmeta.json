@@ -1,1 +1,13 @@
-{"uid":"cedr-case-ticket-card","type":"card","config":{"name":"Search Available Mediators","entrypoint":"/app/cards/CaseCard.jsx","objectTypes":["tickets"]}}
+{
+  "uid": "cedr-case-ticket-card",
+  "type": "card",
+  "config": {
+    "name": "Search Available Mediators — Ticket",
+    "entrypoint": "/app/cards/CaseTicketCard.jsx",
+    "objectTypes": ["tickets"],
+    "properties": [
+      {"name": "subject"},
+      {"name": "enquiry_number_auto_generated"}
+    ]
+  }
+}

@@ -1,1 +1,13 @@
-{"uid":"cedr-case-deal-card","type":"card","config":{"name":"Search Available Mediators","entrypoint":"/app/cards/CaseCard.jsx","objectTypes":["deals"]}}
+{
+  "uid": "cedr-case-deal-card",
+  "type": "card",
+  "config": {
+    "name": "Search Available Mediators — Deal",
+    "entrypoint": "/app/cards/CaseDealCard.jsx",
+    "objectTypes": ["deals"],
+    "properties": [
+      {"name": "dealname"},
+      {"name": "enquiry_id"}
+    ]
+  }
+}
