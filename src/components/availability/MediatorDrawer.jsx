@@ -67,6 +67,14 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
   const { data: slots  } = useSlots(mediator.id, dateFrom, dateTo)
   const { data: series } = useRecurringSeries(mediator.id)
 
+  function toggleHighlight(dateStr, period, date, slotData) {
+    setHighlightedSlots(prev => {
+      const exists = prev.find(s => s.dateStr === dateStr && s.period === period)
+      if (exists) return prev.filter(s => !(s.dateStr === dateStr && s.period === period))
+      return [...prev, { dateStr, period, date: date || new Date(), slotData: slotData || {} }]
+    })
+  }
+
   function openBooking(source) {
     setBookingSource(source)
     setShowBatchPopover(true)
@@ -169,7 +177,7 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
             selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
             showWeekends={showWeekends}
             highlightedSlots={highlightedSlots}
-            onAnyClick={highlightedSlots.length > 0 && !selectMode ? () => openBooking('highlighted') : null}
+            onToggleHighlight={highlightedSlots.length > 0 && !selectMode ? toggleHighlight : null}
           />
         ) : (
           <MonthView

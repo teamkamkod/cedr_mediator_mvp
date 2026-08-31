@@ -37,13 +37,14 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
   }
 
   return (
-    <div className={clsx('relative', dimmed && 'opacity-40')}>
+    <div className={clsx('relative', dimmed && 'opacity-50')}>
       <button onClick={onClick}
         className={clsx(
           'w-full flex flex-col gap-1 px-3 py-3 border rounded transition-all text-left group',
           selected ? selectedStyle : statusStyles[status],
           'min-h-[90px]',
-          selectMode && !selected && 'cursor-cell hover:ring-2 hover:ring-cedr-navy/20'
+          selectMode && !selected && 'cursor-cell hover:ring-2 hover:ring-cedr-navy/20',
+          highlighted && 'border-cedr-navy border-2'
         )}>
         <div className="flex items-center justify-between w-full">
           <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">
@@ -51,7 +52,7 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
           </span>
           <div className="flex items-center gap-1">
             {selected && <Check size={12} className="text-cedr-navy" />}
-            {source === 'series' && !selected && (
+            {source === 'series' && !selected && !highlighted && (
               <Repeat size={10} className="opacity-40 group-hover:opacity-70 transition-opacity" />
             )}
           </div>
@@ -62,14 +63,24 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
               ? cases.case_name : meta.label}
           </span>
         )}
-        {status === 'not_set' && !selected && (
+        {status === 'not_set' && !selected && !highlighted && (
           <span className="text-xs opacity-0 group-hover:opacity-40 transition-opacity">
             {selectMode ? 'Click to select' : 'Click to set'}
           </span>
         )}
       </button>
-      {past       && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none z-10" />}
-      {highlighted && <div className="absolute inset-0 rounded border-2 border-cedr-navy pointer-events-none z-20" />}
+
+      {/* Checkbox for highlight toggle mode */}
+      {(highlighted || dimmed) && (
+        <div className={clsx(
+          'absolute top-1.5 right-1.5 z-20 w-4 h-4 rounded border-2 flex items-center justify-center pointer-events-none',
+          highlighted ? 'bg-cedr-navy border-cedr-navy' : 'border-cedr-muted/50 bg-white'
+        )}>
+          {highlighted && <Check size={9} className="text-white" />}
+        </div>
+      )}
+
+      {past && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none z-10" />}
     </div>
   )
 }

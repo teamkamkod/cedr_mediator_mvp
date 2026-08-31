@@ -49,7 +49,7 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past }) {
   )
 }
 
-export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [], onAnyClick = null }) {
+export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [], onToggleHighlight = null }) {
   const [popover, setPopover] = useState(null)
   const { isCRA } = useAuth()
 
@@ -59,6 +59,8 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
   if (!showWeekends) days = days.filter(d => d.getDay() !== 0 && d.getDay() !== 6)
 
   const colCount = days.length
+  // Disable slot merging when in highlight mode so individual slots remain toggleable
+  const highlightMode = highlightedSlots.length > 0 || onToggleHighlight !== null
 
   function isSelected(date, period) {
     const dateStr = format(date, 'yyyy-MM-dd')
@@ -75,16 +77,16 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
     const slotData = resolveSlot(day, period, slots, series)
     const past     = isPastDate(day)
 
+    // Highlight toggle mode: clicking toggles the slot in/out of highlighted set
+    if (onToggleHighlight && !selectMode) {
+      onToggleHighlight(dateStr, period, day, slotData)
+      return
+    }
+
     if (selectMode) {
       if (past) return
       if (isCRA && !CRA_BOOKABLE.includes(slotData.status)) return
       onToggleSlot({ date: day, dateStr, period, slotData })
-      return
-    }
-
-    // If a custom click handler is provided (e.g. drawer with pre-selection), use it
-    if (onAnyClick) {
-      onAnyClick()
       return
     }
 
@@ -99,18 +101,19 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
 
   return (
     <div className="flex-1 overflow-auto">
-      {/* Day headers */}
+      {/* Day headers — show day name + number + month */}
       <div className={`grid grid-cols-${colCount} border-b border-cedr-border bg-white sticky top-0 z-10`}
         style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}>
         {days.map(day => (
-          <div key={day.toISOString()} className="py-3 px-3 text-center border-r border-cedr-border last:border-r-0">
+          <div key={day.toISOString()} className="py-2.5 px-3 text-center border-r border-cedr-border last:border-r-0">
             <p className="text-[11px] font-semibold text-cedr-muted uppercase tracking-wide">{format(day, 'EEE')}</p>
             <div className={clsx(
-              'w-9 h-9 rounded-full flex items-center justify-center mx-auto mt-1.5',
+              'w-9 h-9 rounded-full flex items-center justify-center mx-auto mt-1',
               isToday(day) ? 'bg-cedr-navy text-white' : 'text-cedr-text'
             )}>
               <p className="text-base font-bold">{format(day, 'd')}</p>
             </div>
+            <p className="text-[10px] text-cedr-muted/60 mt-0.5">{format(day, 'MMM')}</p>
           </div>
         ))}
       </div>
@@ -120,7 +123,8 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
         {days.map(day => {
           const amSlot = resolveSlot(day, 'morning',   slots, series)
           const pmSlot = resolveSlot(day, 'afternoon', slots, series)
-          const merged = !selectMode && canMerge(amSlot, pmSlot)
+          // Disable merging in highlight mode so individual slots can be toggled
+          const merged = !selectMode && !highlightMode && canMerge(amSlot, pmSlot)
           const amSel  = isSelected(day, 'morning')
           const pmSel  = isSelected(day, 'afternoon')
           const past   = isPastDate(day)
