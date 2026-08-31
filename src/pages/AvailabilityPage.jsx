@@ -98,13 +98,27 @@ export default function AvailabilityPage() {
     )
   }, [mediators, slotsByMediator, seriesByMediator, showWithNoData])
 
-  const rangeSlots = useMemo(() => buildRangeSlots(rangeStart, rangeEnd), [rangeStart, rangeEnd])
+  // rangeSlots is mutable: initialized from date pickers, toggled by clicking cells
+  const [rangeSlots, setRangeSlots] = useState([])
   const rangeValid = rangeStart?.dateStr && rangeEnd?.dateStr && rangeStart.dateStr <= rangeEnd.dateStr
+
+  // Reset rangeSlots when date pickers change
+  useEffect(() => {
+    setRangeSlots(rangeValid ? buildRangeSlots(rangeStart, rangeEnd) : [])
+  }, [rangeStart?.dateStr, rangeStart?.period, rangeEnd?.dateStr, rangeEnd?.period])
 
   // Auto-navigate to start date when range is set
   useEffect(() => {
     if (rangeStart?.dateStr) setCurrentDate(parseISO(rangeStart.dateStr))
   }, [rangeStart?.dateStr])
+
+  function toggleRangeSlot(dateStr, period) {
+    setRangeSlots(prev => {
+      const exists = prev.some(s => s.dateStr === dateStr && s.period === period)
+      if (exists) return prev.filter(s => !(s.dateStr === dateStr && s.period === period))
+      return [...prev, { dateStr, period }]
+    })
+  }
 
   function handleRangeChange(key, value) {
     if (key === 'start') setRangeStart(value)
@@ -116,12 +130,16 @@ export default function AvailabilityPage() {
   }
 
   function handleViewMediator(mediator) {
-    const preselected = rangeValid
+    const preselected = rangeSlots.length > 0
       ? rangeSlots.map(s => ({ date: parseISO(s.dateStr), dateStr: s.dateStr, period: s.period, slotData: {} }))
       : [{ date: popover.date, dateStr: format(popover.date, 'yyyy-MM-dd'), period: popover.period, slotData: {} }]
 
+    const initialDate = rangeSlots.length > 0
+      ? parseISO(rangeSlots[0].dateStr)
+      : popover?.date
+
     setPopover(null)
-    setDrawer({ mediator, initialDate: popover?.date || parseISO(rangeSlots[0]?.dateStr), preselectedSlots: preselected })
+    setDrawer({ mediator, initialDate, preselectedSlots: preselected })
   }
 
   function handleConfirmClose() {
@@ -189,7 +207,7 @@ export default function AvailabilityPage() {
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-green-200 border border-green-300" /><span className="text-xs text-cedr-muted">Availability</span></div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-green-50  border border-green-200" /><span className="text-xs text-cedr-muted">Potential</span></div>
         <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-red-50    border border-red-200"   /><span className="text-xs text-cedr-muted">No availability</span></div>
-        {rangeValid && <span className="ml-auto text-xs text-cedr-teal font-medium">📌 Range filter active — {rangeSlots.length} slot{rangeSlots.length !== 1 ? 's' : ''}</span>}
+        {rangeSlots.length > 0 && <span className="ml-auto text-xs text-cedr-teal font-medium">📌 Range active — {rangeSlots.length} slot{rangeSlots.length !== 1 ? 's' : ''} selected</span>}
       </div>
 
       {/* Grid */}
@@ -211,8 +229,9 @@ export default function AvailabilityPage() {
           slotsByMediator={slotsByMediator}
           seriesByMediator={seriesByMediator}
           showWeekends={showWeekends}
-          rangeSlots={rangeValid ? rangeSlots : []}
+          rangeSlots={rangeSlots}
           onCellClick={handleCellClick}
+          onToggleRangeSlot={toggleRangeSlot}
         />
       )}
 
@@ -224,7 +243,7 @@ export default function AvailabilityPage() {
           mediators={visibleMediators}
           slotsByMediator={slotsByMediator}
           seriesByMediator={seriesByMediator}
-          rangeSlots={rangeValid ? rangeSlots : []}
+          rangeSlots={rangeSlots}
           onClose={() => setPopover(null)}
           onViewMediator={handleViewMediator}
         />
