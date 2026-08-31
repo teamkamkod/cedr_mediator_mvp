@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays } from 'date-fns'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, MousePointerClick } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useCalendar } from '../../lib/CalendarContext'
 import { useSlots, useRecurringSeries } from '../../hooks/useAvailability'
@@ -8,25 +8,31 @@ import { useAuth } from '../../lib/auth'
 import WeekView          from '../calendar/WeekView'
 import MonthView         from '../calendar/MonthView'
 import CRABatchPopover   from '../calendar/CRABatchPopover'
-import CRASlotPopover    from '../calendar/CRASlotPopover'
-import SlotPopover       from '../calendar/SlotPopover'
 import FloatingActionBar from '../calendar/FloatingActionBar'
 import { SLOT_STATUSES } from '../../lib/constants'
 import { Avatar } from '../layout/AppLayout'
 
 export default function MediatorDrawer({ mediator, initialDate, preselectedSlots = [], onBack, onBookingCreated }) {
-  const { showWeekends } = useCalendar()
-  const { isCRA }        = useAuth()
+  const { showWeekends }        = useCalendar()
+  const { isCRA, isSuperAdmin } = useAuth()
+  const canBook = isCRA || isSuperAdmin
 
   const [view,        setView]        = useState('week')
   const [currentDate, setCurrentDate] = useState(initialDate || new Date())
-  const [selectedSlots, setSelectedSlots] = useState(preselectedSlots)
+
+  // highlightedSlots: pre-selected from availability search — shown with ring border, status color intact
+  const [highlightedSlots, setHighlightedSlots] = useState(preselectedSlots)
+
+  // selectMode: CRA/admin can also manually add more slots
+  const [selectMode,    setSelectMode]    = useState(false)
+  const [selectedSlots, setSelectedSlots] = useState([])
   const [showBatchPopover, setShowBatchPopover] = useState(false)
-  const [singlePopover,    setSinglePopover]    = useState(null)
-  const [selectMode,       setSelectMode]       = useState(preselectedSlots.length > 0)
+
+  // Which set of slots to book: highlighted (from availability search) or manually selected
+  const [bookingSource, setBookingSource] = useState(null) // 'highlighted' | 'selected'
 
   useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape' && selectMode) exitSelect() }
+    function onKey(e) { if (e.key === 'Escape') { if (selectMode) exitSelect(); else onBack() } }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectMode])
@@ -61,29 +67,40 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
   const { data: slots  } = useSlots(mediator.id, dateFrom, dateTo)
   const { data: series } = useRecurringSeries(mediator.id)
 
+  function openBooking(source) {
+    setBookingSource(source)
+    setShowBatchPopover(true)
+  }
+
   function handleBookingDone(details) {
     exitSelect()
     setShowBatchPopover(false)
-    setSinglePopover(null)
+    setHighlightedSlots([])
+    setBookingSource(null)
     if (details && onBookingCreated) {
       onBookingCreated({ mediatorName: mediator.full_name, slots: details.slots || [] })
     }
   }
 
+  const slotsForBooking = bookingSource === 'highlighted' ? highlightedSlots : selectedSlots
+
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col">
       {/* Drawer header */}
-      <div className="flex items-center gap-4 px-6 py-3 bg-cedr-navy text-white border-b border-white/10 shrink-0">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-white/70 hover:text-white transition-colors text-sm font-medium">
+      <div className="flex items-center gap-4 px-6 py-3 bg-cedr-navy text-white border-b border-white/10 shrink-0 flex-wrap gap-y-2">
+        <button onClick={onBack}
+          className="flex items-center gap-1.5 text-white/70 hover:text-white transition-colors text-sm font-medium shrink-0">
           <ArrowLeft size={15} />
           Back to list
         </button>
-        <div className="w-px h-4 bg-white/20" />
+        <div className="w-px h-4 bg-white/20 shrink-0" />
         <div className="flex items-center gap-2">
           <Avatar profile={mediator} size="sm" />
           <p className="text-sm font-semibold">{mediator.full_name}</p>
         </div>
-        <div className="flex items-center gap-1 bg-white/10 rounded p-1 ml-4">
+
+        {/* View toggle */}
+        <div className="flex items-center gap-1 bg-white/10 rounded p-1 ml-2">
           {['week', 'month'].map(v => (
             <button key={v} onClick={() => setView(v)}
               className={clsx(
@@ -94,15 +111,36 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
             </button>
           ))}
         </div>
-        {selectMode ? (
-          <button onClick={exitSelect}
-            className="ml-2 px-3 py-1.5 rounded text-xs font-medium bg-white/20 hover:bg-white/30 text-white transition-colors">
-            ✕ Exit select
+
+        {/* Nav */}
+        <div className="flex items-center gap-1">
+          <button onClick={() => setCurrentDate(d => { const nd = new Date(d); view === 'week' ? nd.setDate(nd.getDate()-7) : nd.setMonth(nd.getMonth()-1); return nd })}
+            className="px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-white transition-colors">← Prev</button>
+          <button onClick={() => setCurrentDate(new Date())}
+            className="px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-white transition-colors">Today</button>
+          <button onClick={() => setCurrentDate(d => { const nd = new Date(d); view === 'week' ? nd.setDate(nd.getDate()+7) : nd.setMonth(nd.getMonth()+1); return nd })}
+            className="px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-white transition-colors">Next →</button>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Book highlighted slots CTA */}
+        {canBook && highlightedSlots.length > 0 && (
+          <button onClick={() => openBooking('highlighted')}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold bg-purple-500 hover:bg-purple-400 text-white transition-colors shrink-0">
+            Book {highlightedSlots.length} highlighted slot{highlightedSlots.length > 1 ? 's' : ''}
           </button>
-        ) : (
-          <button onClick={() => setSelectMode(true)}
-            className="ml-2 px-3 py-1.5 rounded text-xs font-medium border border-white/30 hover:bg-white/10 text-white/70 hover:text-white transition-colors">
-            Select slots
+        )}
+
+        {/* Select mode toggle */}
+        {canBook && (
+          <button onClick={() => selectMode ? exitSelect() : setSelectMode(true)}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border transition-all shrink-0',
+              selectMode ? 'bg-white text-cedr-navy border-white' : 'border-white/30 text-white/70 hover:text-white hover:bg-white/10'
+            )}>
+            <MousePointerClick size={12} />
+            {selectMode ? selectedSlots.length > 0 ? `${selectedSlots.length} selected` : 'Selecting…' : 'Select'}
           </button>
         )}
       </div>
@@ -115,31 +153,22 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
             <span className="text-xs text-cedr-muted">{meta.label}</span>
           </div>
         ))}
+        {highlightedSlots.length > 0 && (
+          <span className="ml-auto text-xs text-cedr-navy font-medium">
+            {highlightedSlots.length} slot{highlightedSlots.length > 1 ? 's' : ''} pre-selected from search
+          </span>
+        )}
       </div>
 
-      {/* Calendar view */}
+      {/* Calendar */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Nav */}
-        <div className="flex items-center gap-2 px-6 py-2 bg-white border-b border-cedr-border shrink-0">
-          <button onClick={() => setCurrentDate(d => {
-            const nd = new Date(d)
-            view === 'week' ? nd.setDate(nd.getDate() - 7) : nd.setMonth(nd.getMonth() - 1)
-            return nd
-          })} className="btn-secondary text-xs px-3 py-1">← Prev</button>
-          <button onClick={() => setCurrentDate(new Date())} className="btn-secondary text-xs px-3 py-1">Today</button>
-          <button onClick={() => setCurrentDate(d => {
-            const nd = new Date(d)
-            view === 'week' ? nd.setDate(nd.getDate() + 7) : nd.setMonth(nd.getMonth() + 1)
-            return nd
-          })} className="btn-secondary text-xs px-3 py-1">Next →</button>
-        </div>
-
         {view === 'week' ? (
           <WeekView
             currentDate={currentDate} slots={slots || []} series={series || []}
             mediatorId={mediator.id}
             selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
             showWeekends={showWeekends}
+            highlightedSlots={highlightedSlots}
           />
         ) : (
           <MonthView
@@ -151,46 +180,24 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
         )}
       </div>
 
-      {/* Floating action bar */}
+      {/* Floating action bar for manually selected slots */}
       {selectMode && selectedSlots.length > 0 && (
         <FloatingActionBar
           selectedSlots={selectedSlots}
           onClear={() => setSelectedSlots([])}
-          onAction={() => setShowBatchPopover(true)}
+          onAction={() => openBooking('selected')}
         />
       )}
 
-      {/* Batch popover */}
-      {showBatchPopover && isCRA && (
+      {/* CRA/admin batch booking popover */}
+      {showBatchPopover && canBook && (
         <CRABatchPopover
-          selectedSlots={selectedSlots}
+          selectedSlots={slotsForBooking}
           mediatorId={mediator.id}
-          onClose={() => setShowBatchPopover(false)}
+          mediatorOverride={mediator}
+          onClose={() => { setShowBatchPopover(false); setBookingSource(null) }}
           onDone={handleBookingDone}
         />
-      )}
-      {showBatchPopover && !isCRA && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-6 bg-black/20"
-          onClick={() => setShowBatchPopover(false)}>
-          <div className="bg-white rounded-xl p-5 text-sm text-cedr-muted">
-            Batch status setting not available in this view.
-          </div>
-        </div>
-      )}
-
-      {/* Single slot popover — opened by WeekView/MonthView click */}
-      {singlePopover && (
-        isCRA ? (
-          <CRASlotPopover slot={singlePopover.slotData} date={singlePopover.date}
-            period={singlePopover.period} mediatorId={mediator.id}
-            readOnly={singlePopover.readOnly}
-            onClose={() => setSinglePopover(null)} />
-        ) : (
-          <SlotPopover slot={singlePopover.slotData} date={singlePopover.date}
-            period={singlePopover.period} mediatorId={mediator.id}
-            readOnly={singlePopover.readOnly}
-            onClose={() => setSinglePopover(null)} />
-        )
       )}
     </div>
   )

@@ -49,7 +49,7 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past }) {
   )
 }
 
-export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends }) {
+export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [] }) {
   const [popover, setPopover] = useState(null)
   const { isCRA } = useAuth()
 
@@ -63,6 +63,11 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
   function isSelected(date, period) {
     const dateStr = format(date, 'yyyy-MM-dd')
     return selectedSlots.some(s => s.dateStr === dateStr && s.period === period)
+  }
+
+  function isHighlighted(date, period) {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    return highlightedSlots.some(s => s.dateStr === dateStr && s.period === period)
   }
 
   function handleCellClick(day, period) {
@@ -115,6 +120,8 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
           const amSel  = isSelected(day, 'morning')
           const pmSel  = isSelected(day, 'afternoon')
           const past   = isPastDate(day)
+          const amHigh = isHighlighted(day, 'morning')
+          const pmHigh = isHighlighted(day, 'afternoon')
 
           return (
             <div key={day.toISOString()}
@@ -131,10 +138,10 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                 <>
                   <SlotCell slotData={amSlot} period="morning"
                     onClick={() => handleCellClick(day, 'morning')}
-                    selectMode={selectMode} selected={amSel} past={past} />
+                    selectMode={selectMode} selected={amSel} past={past} highlighted={amHigh} />
                   <SlotCell slotData={pmSlot} period="afternoon"
                     onClick={() => handleCellClick(day, 'afternoon')}
-                    selectMode={selectMode} selected={pmSel} past={past} />
+                    selectMode={selectMode} selected={pmSel} past={past} highlighted={pmHigh} />
                 </>
               )}
             </div>

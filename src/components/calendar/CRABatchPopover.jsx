@@ -5,10 +5,11 @@ import { useBatchCreateProvisionalBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 import { format, parseISO } from 'date-fns'
 
-export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, onDone }) {
+export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, onDone, mediatorOverride = null }) {
   const [sendEmail, setSendEmail] = useState(false)
   const [message,   setMessage]   = useState('')
   const { activeMediatorProfile } = useAuth()
+  const effectiveProfile = mediatorOverride || activeMediatorProfile
   const createBatch = useBatchCreateProvisionalBooking()
   const ref         = useRef()
 
@@ -36,9 +37,9 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
       slots:             sorted.map(s => ({ dateStr: s.dateStr, period: s.period })),
       sendEmail,
       message:           sendEmail ? message : null,
-      hubspotMediatorId: activeMediatorProfile?.hubspot_mediator_object_id,
+      hubspotMediatorId: effectiveProfile?.hubspot_mediator_object_id,
     })
-    onDone({ mediatorName: activeMediatorProfile?.full_name, slots: sorted })
+    onDone({ mediatorName: effectiveProfile?.full_name, slots: sorted })
   }
 
   return (

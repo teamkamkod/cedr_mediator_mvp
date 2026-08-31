@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { format, addWeeks, subWeeks, parseISO, addDays, startOfWeek, endOfWeek } from 'date-fns'
 import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCalendar } from '../lib/CalendarContext'
 import { useAllMediators, useAllSeries, useGlobalSlots } from '../hooks/useGlobalAvailability'
 import GlobalWeekView    from '../components/availability/GlobalWeekView'
@@ -47,6 +48,7 @@ function buildRangeSlots(start, end) {
 
 export default function AvailabilityPage() {
   const { showWeekends } = useCalendar()
+  const queryClient = useQueryClient()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showWithNoData, setShowWithNoData] = useState(false)
   const [rangeStart, setRangeStart] = useState(null)
@@ -115,6 +117,11 @@ export default function AvailabilityPage() {
 
     setPopover(null)
     setDrawer({ mediator, initialDate: popover?.date || parseISO(rangeSlots[0]?.dateStr), preselectedSlots: preselected })
+  }
+
+  function handleConfirmClose() {
+    queryClient.invalidateQueries({ queryKey: ['global-slots'] })
+    setBookingConfirm(null)
   }
 
   function handleBookingCreated(details) {
@@ -233,7 +240,7 @@ export default function AvailabilityPage() {
       {bookingConfirm && (
         <BookingConfirmModal
           booking={bookingConfirm}
-          onClose={() => setBookingConfirm(null)}
+          onClose={handleConfirmClose}
         />
       )}
     </div>
