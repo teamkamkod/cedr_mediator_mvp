@@ -169,6 +169,7 @@ export default function MediatorDrawer({ mediator, initialDate, preselectedSlots
             selectMode={selectMode} selectedSlots={selectedSlots} onToggleSlot={toggleSlot}
             showWeekends={showWeekends}
             highlightedSlots={highlightedSlots}
+            onAnyClick={highlightedSlots.length > 0 && !selectMode ? () => openBooking('highlighted') : null}
           />
         ) : (
           <MonthView

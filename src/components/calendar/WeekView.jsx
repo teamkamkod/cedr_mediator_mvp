@@ -49,7 +49,7 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past }) {
   )
 }
 
-export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [] }) {
+export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [], onAnyClick = null }) {
   const [popover, setPopover] = useState(null)
   const { isCRA } = useAuth()
 
@@ -76,16 +76,20 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
     const past     = isPastDate(day)
 
     if (selectMode) {
-      if (past) return // past slots not selectable
+      if (past) return
       if (isCRA && !CRA_BOOKABLE.includes(slotData.status)) return
       onToggleSlot({ date: day, dateStr, period, slotData })
       return
     }
 
+    // If a custom click handler is provided (e.g. drawer with pre-selection), use it
+    if (onAnyClick) {
+      onAnyClick()
+      return
+    }
+
     if (past) {
-      // Past + empty → do nothing
       if (slotData.status === 'not_set') return
-      // Past + has status → read-only popover
       setPopover({ date: day, period, slotData, readOnly: true })
       return
     }

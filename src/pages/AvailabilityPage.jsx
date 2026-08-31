@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, addWeeks, subWeeks, parseISO, addDays, startOfWeek, endOfWeek } from 'date-fns'
 import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -100,6 +100,11 @@ export default function AvailabilityPage() {
 
   const rangeSlots = useMemo(() => buildRangeSlots(rangeStart, rangeEnd), [rangeStart, rangeEnd])
   const rangeValid = rangeStart?.dateStr && rangeEnd?.dateStr && rangeStart.dateStr <= rangeEnd.dateStr
+
+  // Auto-navigate to start date when range is set
+  useEffect(() => {
+    if (rangeStart?.dateStr) setCurrentDate(parseISO(rangeStart.dateStr))
+  }, [rangeStart?.dateStr])
 
   function handleRangeChange(key, value) {
     if (key === 'start') setRangeStart(value)
