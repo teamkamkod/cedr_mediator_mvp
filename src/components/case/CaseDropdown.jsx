@@ -1,22 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, X, Loader2, Briefcase, Ticket } from 'lucide-react'
+import { Search, X, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { useCase } from '../../lib/CaseContext'
-
-function CaseBadge({ object_type }) {
-  return (
-    <span className={clsx(
-      'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide shrink-0',
-      object_type === 'deal'
-        ? 'bg-blue-100 text-blue-700 border border-blue-200'
-        : 'bg-gray-100 text-gray-600 border border-gray-200'
-    )}>
-      {object_type === 'deal' ? <Briefcase size={8} /> : <Ticket size={8} />}
-      {object_type === 'deal' ? 'Case' : 'Enquiry'}
-    </span>
-  )
-}
 
 export default function CaseDropdown({ onChange }) {
   const { selectedCase, setSelectedCase, isFromCRM } = useCase()
@@ -83,7 +69,6 @@ export default function CaseDropdown({ onChange }) {
       <div className="space-y-1">
         <p className="text-xs font-medium text-cedr-muted uppercase tracking-wide">Case</p>
         <div className="flex items-center gap-2 px-3 py-2.5 bg-cedr-light border border-cedr-border rounded">
-          <CaseBadge object_type={selectedCase.object_type} />
           <span className="text-sm font-medium text-cedr-navy truncate">{selectedCase.record_name}</span>
           <span className="text-xs text-cedr-muted ml-auto shrink-0">{selectedCase.case_id}</span>
         </div>
@@ -100,7 +85,6 @@ export default function CaseDropdown({ onChange }) {
       {/* Selected state */}
       {selectedCase ? (
         <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded">
-          <CaseBadge object_type={selectedCase.object_type} />
           <span className="text-sm font-medium text-purple-800 truncate flex-1">{selectedCase.record_name}</span>
           <span className="text-xs text-purple-600 shrink-0">{selectedCase.case_id}</span>
           <button onClick={clear} className="text-purple-400 hover:text-purple-700 transition-colors shrink-0">
@@ -135,7 +119,6 @@ export default function CaseDropdown({ onChange }) {
                 <button key={`${item.object_type}-${item.record_id}`}
                   onClick={() => select(item)}
                   className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-cedr-light transition-colors text-left border-b border-cedr-border/50 last:border-b-0">
-                  <CaseBadge object_type={item.object_type} />
                   <span className="text-sm text-cedr-navy font-medium truncate flex-1">{item.record_name}</span>
                   <span className="text-xs text-cedr-muted shrink-0">{item.case_id}</span>
                 </button>
