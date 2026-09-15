@@ -56,6 +56,42 @@ function matchesFrequency(series, date) {
   return true
 }
 
+// Returns the most recent updated_at across availability_slots (excl. pencilled/provisional/confirmed)
+// and recurring_series for a given mediator — used by CRA to gauge how fresh the calendar is.
+export function useLastCalendarUpdate(mediatorId) {
+  return useQuery({
+    queryKey:  ['last-calendar-update', mediatorId],
+    enabled:   !!mediatorId,
+    staleTime: 60 * 1000, // 1 min
+    queryFn:   async () => {
+      const [slotsRes, seriesRes] = await Promise.all([
+        supabase
+          .from('availability_slots')
+          .select('updated_at')
+          .eq('mediator_id', mediatorId)
+          .in('status', ['available', 'unavailable', 'ask_me'])
+          .order('updated_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('recurring_series')
+          .select('updated_at')
+          .eq('mediator_id', mediatorId)
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false })
+          .limit(1),
+      ])
+
+      const slotDate   = slotsRes.data?.[0]?.updated_at  ? new Date(slotsRes.data[0].updated_at)  : null
+      const seriesDate = seriesRes.data?.[0]?.updated_at ? new Date(seriesRes.data[0].updated_at) : null
+
+      if (!slotDate && !seriesDate) return null
+      if (!slotDate)   return seriesDate
+      if (!seriesDate) return slotDate
+      return slotDate > seriesDate ? slotDate : seriesDate
+    },
+  })
+}
+
 export function useSlots(mediatorId, dateFrom, dateTo) {
   return useQuery({
     queryKey: ['slots', mediatorId, dateFrom, dateTo],

@@ -1,8 +1,39 @@
-import { format, addWeeks, subWeeks, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns'
+import { format, addWeeks, subWeeks, addMonths, subMonths, startOfWeek, endOfWeek, formatDistanceToNow, differenceInDays } from 'date-fns'
 import { ChevronLeft, ChevronRight, Bell, MousePointerClick, CalendarDays, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../lib/auth'
+import { useLastCalendarUpdate } from '../../hooks/useAvailability'
 import { Avatar } from '../layout/AppLayout'
+
+function LastUpdateBadge({ mediatorId }) {
+  const { data: lastUpdate, isLoading } = useLastCalendarUpdate(mediatorId)
+
+  if (isLoading) return null
+
+  if (!lastUpdate) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-semibold bg-red-100 text-red-700 border-red-200 shrink-0">
+        Never updated
+      </span>
+    )
+  }
+
+  const days  = differenceInDays(new Date(), lastUpdate)
+  const label = formatDistanceToNow(lastUpdate, { addSuffix: true })
+
+  const style = days < 7
+    ? 'bg-green-100 text-green-700 border-green-200'
+    : days < 30
+      ? 'bg-amber-100 text-amber-700 border-amber-200'
+      : 'bg-red-100 text-red-700 border-red-200'
+
+  return (
+    <span className={clsx('inline-flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-semibold shrink-0', style)}
+      title={lastUpdate.toLocaleString()}>
+      Last update: {label}
+    </span>
+  )
+}
 
 export default function CalendarHeader({
   view, setView, currentDate, setCurrentDate,
@@ -77,6 +108,7 @@ export default function CalendarHeader({
               <p className="text-xs font-semibold text-cedr-navy leading-tight">{activeMediatorProfile.full_name}</p>
               <p className="text-[10px] text-cedr-muted leading-tight">Mediator calendar</p>
             </div>
+            {isCRA && <LastUpdateBadge mediatorId={activeMediatorProfile.id} />}
           </div>
         )}
         {showCTA && (
