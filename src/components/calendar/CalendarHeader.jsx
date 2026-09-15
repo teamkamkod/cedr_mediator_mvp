@@ -1,5 +1,5 @@
 import { format, addWeeks, subWeeks, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns'
-import { ChevronLeft, ChevronRight, Bell, MousePointerClick, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Bell, MousePointerClick, CalendarDays, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../lib/auth'
 import { Avatar } from '../layout/AppLayout'
@@ -7,7 +7,7 @@ import { Avatar } from '../layout/AppLayout'
 export default function CalendarHeader({
   view, setView, currentDate, setCurrentDate,
   onRequestUpdate, selectMode, onToggleSelectMode, selectedCount,
-  showWeekends, onToggleWeekends,
+  showWeekends, onToggleWeekends, onManageClerks,
 }) {
   const { activeMediatorProfile, isSuperAdmin, isCRA } = useAuth()
 
@@ -83,6 +83,13 @@ export default function CalendarHeader({
           <button onClick={onRequestUpdate} className="flex items-center gap-1.5 btn-secondary text-xs px-3 py-1.5 shrink-0">
             <Bell size={12} />
             Request update
+          </button>
+        )}
+        {isCRA && activeMediatorProfile && (
+          <button onClick={onManageClerks}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-cedr-border text-cedr-muted hover:border-cedr-navy/30 hover:text-cedr-navy transition-all shrink-0">
+            <Users size={12} />
+            Manage clerks
           </button>
         )}
 

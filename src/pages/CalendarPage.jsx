@@ -11,6 +11,7 @@ import RequestUpdateModal  from '../components/calendar/RequestUpdateModal'
 import FloatingActionBar   from '../components/calendar/FloatingActionBar'
 import BatchStatusPopover  from '../components/calendar/BatchStatusPopover'
 import CRABatchPopover     from '../components/calendar/CRABatchPopover'
+import ManageClerksModal   from '../components/calendar/ManageClerksModal'
 import { SLOT_STATUSES }   from '../lib/constants'
 
 export default function CalendarPage() {
@@ -18,6 +19,7 @@ export default function CalendarPage() {
   const { currentDate, setCurrentDate, view, setView, showWeekends, setShowWeekends } = useCalendar()
 
   const [showUpdateModal,  setShowUpdateModal]  = useState(false)
+  const [showManageClerks, setShowManageClerks] = useState(false)
   const [selectMode,       setSelectMode]       = useState(false)
   const [selectedSlots,    setSelectedSlots]    = useState([])
   const [showBatchPopover, setShowBatchPopover] = useState(false)
@@ -76,6 +78,7 @@ export default function CalendarPage() {
         view={view} setView={setView}
         currentDate={currentDate} setCurrentDate={setCurrentDate}
         onRequestUpdate={() => setShowUpdateModal(true)}
+        onManageClerks={() => setShowManageClerks(true)}
         selectMode={selectMode}
         onToggleSelectMode={toggleSelectMode}
         selectedCount={selectedSlots.length}
@@ -137,6 +140,13 @@ export default function CalendarPage() {
           hubspotMediatorId={activeMediatorProfile?.hubspot_mediator_object_id}
           mediatorId={mediatorId}
           onClose={() => setShowUpdateModal(false)}
+        />
+      )}
+      {showManageClerks && activeMediatorProfile && (
+        <ManageClerksModal
+          mediatorId={mediatorId}
+          mediatorName={activeMediatorProfile.full_name}
+          onClose={() => setShowManageClerks(false)}
         />
       )}
     </div>

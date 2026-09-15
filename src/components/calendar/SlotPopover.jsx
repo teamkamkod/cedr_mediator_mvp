@@ -1,15 +1,347 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, forwardRef } from 'react'
 import { format, getDay } from 'date-fns'
-import { X, Repeat, Sun, AlertTriangle, Trash2 } from 'lucide-react'
+import { X, Repeat, Sun, AlertTriangle, Trash2, Pencil, Mail } from 'lucide-react'
 import { clsx } from 'clsx'
-import { SLOT_STATUSES, EDITABLE_STATUSES, RECURRENCE_FREQUENCIES } from '../../lib/constants'
+import { SLOT_STATUSES, EDITABLE_STATUSES, CRA_EDITABLE_STATUSES, RECURRENCE_FREQUENCIES } from '../../lib/constants'
 import {
   useUpsertSlot, useCreateSeries,
   useDeleteSlot, useDeleteSeriesException, useDeactivateSeriesFrom,
+  usePencilSlot, useCreateProvisionalBooking,
 } from '../../hooks/useAvailability'
+import { useAuth } from '../../lib/auth'
+import { useCase } from '../../lib/CaseContext'
+import CaseDropdown from '../case/CaseDropdown'
 
+// ─────────────────────────────────────────────────────────────
+// CRA ADAPTIVE SECTION — handles all CRA slot interactions
+// ─────────────────────────────────────────────────────────────
+function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMediatorProfile }) {
+  const currentStatus = slot?.status || 'not_set'
+  const isMutableBase = ['not_set','available','unavailable'].includes(currentStatus)
+  const isAskMe       = currentStatus === 'ask_me'
+  const isPencilled   = currentStatus === 'pencilled'
+  const isProvisional = currentStatus === 'provisionally_booked'
+  const isConfirmed   = currentStatus === 'confirmed'
+
+  const [step,         setStep]         = useState('view')  // 'view'|'edit_status'|'pencil_form'|'provisional_form'|'confirm_overwrite'
+  const [craStatus,    setCraStatus]    = useState(null)    // chosen status in edit_status step
+  const [localCase,    setLocalCase]    = useState(null)
+  const [craFullDay,   setCraFullDay]   = useState(false)
+  const [sendEmail,    setSendEmail]    = useState(false)
+  const [message,      setMessage]      = useState('')
+  const [confirmDel,   setConfirmDel]   = useState(false)
+
+  const deleteSlot      = useDeleteSlot()
+  const pencilSlot      = usePencilSlot()
+  const createProvis    = useCreateProvisionalBooking()
+  const upsert          = useUpsertSlot()
+  const ref             = useRef()
+
+  useEffect(() => {
+    function handle(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [onClose])
+
+  const meta    = SLOT_STATUSES[currentStatus] || SLOT_STATUSES.not_set
+  const dateStr = format(date, 'yyyy-MM-dd')
+  const hubId   = activeMediatorProfile?.hubspot_mediator_object_id
+
+  async function handleSaveStatus() {
+    // save available or unavailable
+    await upsert.mutateAsync({ mediatorId, date: dateStr, period, status: craStatus, notes: null, mode: 'one_time' })
+    onClose()
+  }
+
+  async function handlePencil() {
+    if (!localCase) return
+    await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
+    onClose()
+  }
+
+  async function handleProvisional() {
+    if (!localCase) return
+    await createProvis.mutateAsync({
+      mediatorId, date: dateStr, period, fullDay: craFullDay,
+      sendEmail, message: sendEmail ? message : null,
+      hubspotMediatorId: hubId, caseData: localCase,
+    })
+    onClose()
+  }
+
+  async function handleDelete() {
+    if (slot?.id) await deleteSlot.mutateAsync({ slotId: slot.id, mediatorId })
+    onClose()
+  }
+
+  const saving = deleteSlot.isPending || pencilSlot.isPending || createProvis.isPending || upsert.isPending
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
+      <div ref={ref} onClick={e => e.stopPropagation()}
+        className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-md overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-cedr-border">
+          <div>
+            <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
+            <p className="text-xs text-cedr-muted capitalize">{period}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {(currentStatus !== 'not_set') && (
+              <span className={clsx('inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs font-medium', meta.color)}>
+                <div className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />{meta.label}
+              </span>
+            )}
+            <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light">
+              <X size={14} className="text-cedr-muted" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── DELETE CONFIRM ── */}
+        {confirmDel && (
+          <div className="p-5 space-y-4">
+            <p className="text-sm font-medium text-red-700 flex items-center gap-2">
+              <Trash2 size={15} />Delete this slot?
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDel(false)} className="btn-secondary flex-1 text-xs">Cancel</button>
+              <button onClick={handleDelete} disabled={saving}
+                className="flex-1 text-xs px-4 py-2 rounded font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50">
+                {saving ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── CONFIRM OVERWRITE (pencilled ↔ provisional) ── */}
+        {!confirmDel && step === 'confirm_overwrite' && (
+          <div className="p-5 space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded">
+              <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Overwrite existing {currentStatus === 'pencilled' ? 'pencil' : 'provisional booking'}?</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  This slot is currently <strong>{meta.label}</strong>. Continuing will replace it with a{' '}
+                  {craStatus === 'pencilled' ? 'pencil' : 'provisional booking'}.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setStep(craStatus === 'pencilled' ? 'pencil_form' : 'provisional_form'); setConfirmDel(false) }}
+                className="btn-secondary flex-1 text-xs">Cancel</button>
+              <button onClick={async () => {
+                if (slot?.id) await deleteSlot.mutateAsync({ slotId: slot.id, mediatorId })
+                setStep(craStatus === 'pencilled' ? 'pencil_form' : 'provisional_form')
+                setConfirmDel(false)
+              }} disabled={saving}
+                className="flex-1 text-xs px-4 py-2 rounded font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors disabled:opacity-50">
+                {saving ? 'Processing…' : 'Overwrite'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── VIEW / DEFAULT ── */}
+        {!confirmDel && step === 'view' && (
+          <div className="p-5 space-y-4">
+            {/* READ-ONLY: confirmed */}
+            {isConfirmed && <p className="text-xs text-cedr-muted">This slot is confirmed. No changes allowed.</p>}
+
+            {/* READ-ONLY + DELETE: ask_me */}
+            {isAskMe && (
+              <>
+                <p className="text-xs text-cedr-muted">Ask Me slots are set by the mediator. You can only delete this slot.</p>
+                <div className="flex gap-2">
+                  <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
+                  <button onClick={() => setConfirmDel(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 transition-colors">
+                    <Trash2 size={13} />Delete
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* DELETE: pencilled */}
+            {isPencilled && (
+              <>
+                <div className="space-y-1">
+                  {slot?.record_name && (
+                    <p className="text-xs text-cedr-muted">Case: <span className="font-medium text-cedr-text">{slot.record_name}</span></p>
+                  )}
+                  {slot?.case_id && <p className="text-xs text-cedr-muted">ID: {slot.case_id}</p>}
+                  {slot?.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
+                  <button onClick={() => { setCraStatus('provisional'); setStep('confirm_overwrite') }}
+                    className="flex-1 text-sm px-3 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors">
+                    Convert to Provisional
+                  </button>
+                  <button onClick={() => setConfirmDel(true)}
+                    className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* PROVISIONAL: view + convert to pencil */}
+            {isProvisional && (
+              <>
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded">
+                  <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-purple-800">Provisional Booking</p>
+                    {slot?.record_name && <p className="text-xs text-purple-600">{slot.record_name}</p>}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
+                  <button onClick={() => { setCraStatus('pencilled'); setStep('confirm_overwrite') }}
+                    className="flex items-center gap-1.5 flex-1 text-sm px-3 py-2 rounded font-medium bg-slate-600 text-white hover:bg-slate-700 transition-colors">
+                    <Pencil size={13} />Convert to Pencil
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* MUTABLE: available / unavailable / not_set → show action buttons */}
+            {isMutableBase && (
+              <>
+                {slot?.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => { setCraStatus('available'); setStep('edit_status') }}
+                    className="flex flex-col items-center gap-1 p-3 rounded border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-colors">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <span className="text-xs font-semibold text-green-800">Available</span>
+                  </button>
+                  <button onClick={() => { setCraStatus('unavailable'); setStep('edit_status') }}
+                    className="flex flex-col items-center gap-1 p-3 rounded border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-colors">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <span className="text-xs font-semibold text-red-800">Unavailable</span>
+                  </button>
+                  <button onClick={() => { setCraStatus('pencilled'); setStep('pencil_form') }}
+                    className="flex flex-col items-center gap-1 p-3 rounded border-2 border-slate-300 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <Pencil size={14} className="text-slate-500" />
+                    <span className="text-xs font-semibold text-slate-700">Pencil</span>
+                  </button>
+                </div>
+                <button onClick={() => { setCraStatus('provisional'); setStep('provisional_form') }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors">
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span className="text-sm font-semibold text-purple-800">Provisional Booking</span>
+                </button>
+                {currentStatus !== 'not_set' && (
+                  <button onClick={() => setConfirmDel(true)}
+                    className="flex items-center justify-center gap-1.5 w-full py-2 rounded text-xs text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors">
+                    <Trash2 size={12} />Remove slot
+                  </button>
+                )}
+              </>
+            )}
+
+            {isConfirmed && (
+              <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
+            )}
+          </div>
+        )}
+
+        {/* ── EDIT STATUS (available / unavailable) ── */}
+        {!confirmDel && step === 'edit_status' && (
+          <div className="p-5 space-y-4">
+            <p className="text-sm font-medium text-cedr-navy capitalize">
+              Set slot as <span className={craStatus === 'available' ? 'text-green-700' : 'text-red-700'}>{craStatus}</span>
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
+              <button onClick={handleSaveStatus} disabled={saving}
+                className={clsx('flex-1 text-sm px-4 py-2 rounded font-medium text-white transition-colors disabled:opacity-50',
+                  craStatus === 'available' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700')}>
+                {saving ? 'Saving…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── PENCIL FORM ── */}
+        {!confirmDel && step === 'pencil_form' && (
+          <div className="p-5 space-y-4">
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-300 rounded">
+              <Pencil size={14} className="text-slate-500" />
+              <span className="text-sm font-semibold text-slate-700">Pencilling a slot</span>
+            </div>
+            <CaseDropdown onChange={setLocalCase} />
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={craFullDay} onChange={e => setCraFullDay(e.target.checked)}
+                className="accent-cedr-navy" />
+              <span className="text-sm text-cedr-text">Full day (AM + PM)</span>
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
+              <button onClick={() => {
+                // Check conflict if current slot is provisional_booked
+                if (isProvisional) { setStep('confirm_overwrite'); return }
+                handlePencil()
+              }} disabled={saving || !localCase}
+                className="flex-1 text-sm px-4 py-2 rounded font-medium bg-slate-700 text-white hover:bg-slate-800 transition-colors disabled:opacity-50">
+                {saving ? 'Saving…' : 'Pencil slot'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── PROVISIONAL FORM ── */}
+        {!confirmDel && step === 'provisional_form' && (
+          <div className="p-5 space-y-4">
+            <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded">
+              <div className="w-2 h-2 rounded-full bg-purple-500" />
+              <span className="text-sm font-semibold text-purple-800">Provisional Booking</span>
+            </div>
+            <CaseDropdown onChange={setLocalCase} />
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={craFullDay} onChange={e => setCraFullDay(e.target.checked)}
+                className="accent-cedr-navy" />
+              <span className="text-sm text-cedr-text">Full day (AM + PM)</span>
+            </label>
+            <label className={clsx('flex items-center gap-3 p-3 rounded border cursor-pointer transition-all select-none',
+              sendEmail ? 'border-cedr-teal bg-cedr-teal/5' : 'border-cedr-border hover:border-cedr-teal/40')}>
+              <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)}
+                className="accent-cedr-navy shrink-0" />
+              <Mail size={14} className={sendEmail ? 'text-cedr-teal' : 'text-cedr-muted'} />
+              <span className={clsx('text-sm font-medium', sendEmail ? 'text-cedr-navy' : 'text-cedr-text')}>
+                Notify mediator
+              </span>
+            </label>
+            {sendEmail && (
+              <textarea value={message} onChange={e => setMessage(e.target.value)}
+                placeholder="Optional message…" rows={2} className="input text-xs resize-none" />
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
+              <button onClick={() => {
+                if (isPencilled) { setStep('confirm_overwrite'); return }
+                handleProvisional()
+              }} disabled={saving || !localCase}
+                className="flex-1 text-sm px-4 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50">
+                {saving ? 'Saving…' : 'Book'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// UNIFIED ENTRY POINT
+// ─────────────────────────────────────────────────────────────
 // step: 'edit' | 'confirm_series_edit' | 'confirm_delete' | 'confirm_delete_series'
 export default function SlotPopover({ slot, date, period, mediatorId, onClose, readOnly = false }) {
+  const { isCRA, isSuperAdmin, activeMediatorProfile } = useAuth()
+
   const [step, setStep]         = useState('edit')
   const [status, setStatus]     = useState(slot?.status || 'not_set')
   const [notes, setNotes]       = useState(slot?.notes  || '')
@@ -20,7 +352,6 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose, r
 
   const isNew        = !slot || slot.source === 'none'
   const isFromSeries = slot?.source === 'series'
-  const isBooked     = ['provisionally_booked', 'confirmed'].includes(slot?.status)
   const canDelete    = slot?.source === 'explicit' || slot?.source === 'series'
   const canFullDay   = isNew && !isFromSeries
 
@@ -39,9 +370,10 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose, r
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
-  // ── Read-only view (past slots) ───────────────────────────
+  // ── Read-only (past slots) ─────────────────────────────────
   if (readOnly) {
     const meta = SLOT_STATUSES[slot?.status] || SLOT_STATUSES.not_set
+    const canDeletePencil = isCRA && slot?.status === 'pencilled'
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
         <div ref={ref} onClick={e => e.stopPropagation()}
@@ -57,314 +389,240 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose, r
           </div>
           <div className="p-4 space-y-3">
             <div className={clsx('inline-flex items-center gap-2 px-3 py-1.5 rounded border text-sm font-medium', meta.color)}>
-              <div className={`w-2 h-2 rounded-full ${meta.dot}`} />
-              {meta.label || 'Not set'}
+              <div className={`w-2 h-2 rounded-full ${meta.dot}`} />{meta.label || 'Not set'}
             </div>
             {slot?.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
             <p className="text-xs text-cedr-muted/60">Past slots are read-only.</p>
           </div>
-          <div className="px-4 pb-4">
-            <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
+          <div className="flex gap-2 px-4 pb-4">
+            {canDeletePencil && (
+              <button onClick={() => deleteSlot.mutate({ slotId: slot.id, mediatorId }, { onSuccess: onClose })}
+                disabled={deleteSlot.isPending}
+                className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200">
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
           </div>
         </div>
       </div>
     )
   }
 
-  // ── Save ──────────────────────────────────────────────────
+  // ── CRA → adaptive section ─────────────────────────────────
+  if (isCRA) {
+    return (
+      <CRAAdaptiveSection
+        slot={slot} date={date} period={period} mediatorId={mediatorId}
+        onClose={onClose} activeMediatorProfile={activeMediatorProfile}
+      />
+    )
+  }
+
+  // ── Mediator / Clerk / Super Admin — original popover ──────
+  const editableStatuses = isSuperAdmin ? Object.keys(SLOT_STATUSES).filter(s => s !== 'not_set' && s !== 'pencilled') : EDITABLE_STATUSES
+  const isBooked         = ['provisionally_booked', 'confirmed'].includes(slot?.status)
+
   async function handleSave() {
-    if (isBooked) return onClose()
-    if (isFromSeries && step !== 'confirm_series_edit') { setStep('confirm_series_edit'); return }
-
-    const dateStr     = format(date, 'yyyy-MM-dd')
-    const otherPeriod = period === 'morning' ? 'afternoon' : 'morning'
-
-    if (mode === 'recurring' && !isFromSeries) {
-      const rawDay    = getDay(date)
-      const dayOfWeek = rawDay === 0 ? 6 : rawDay - 1
-      const base      = { mediator_id: mediatorId, day_of_week: dayOfWeek, status, frequency, start_date: dateStr, end_date: endDate || null, notes: notes || null }
-      if (fullDay) {
-        await Promise.all([
-          createSeries.mutateAsync({ ...base, period: 'morning' }),
-          createSeries.mutateAsync({ ...base, period: 'afternoon' }),
-        ])
-      } else {
-        await createSeries.mutateAsync({ ...base, period })
-      }
-    } else {
-      await upsert.mutateAsync({ mediatorId, date: dateStr, period, status, notes, seriesId: isFromSeries ? slot.series_id : null, isException: isFromSeries })
-      if (fullDay && canFullDay) {
-        await upsert.mutateAsync({ mediatorId, date: dateStr, period: otherPeriod, status, notes, seriesId: null, isException: false })
-      }
-    }
-    onClose()
-  }
-
-  async function handleSeriesEditConfirm(scope) {
-    await upsert.mutateAsync({
-      mediatorId, date: format(date, 'yyyy-MM-dd'), period, status, notes,
-      seriesId: slot.series_id, isException: scope === 'this',
-    })
-    onClose()
-  }
-
-  // ── Delete ─────────────────────────────────────────────────
-  async function handleDeleteConfirm() {
-    // Explicit unique slot
-    await deleteSlot.mutateAsync({ slotId: slot.id, mediatorId })
-    onClose()
-  }
-
-  async function handleDeleteSeriesConfirm(scope) {
     const dateStr = format(date, 'yyyy-MM-dd')
-    if (scope === 'this') {
-      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.series_id })
+    if (mode === 'one_time') {
+      await upsert.mutateAsync({ mediatorId, date: dateStr, period, status, notes, mode })
+      onClose()
     } else {
-      await deactivateSeries.mutateAsync({ seriesId: slot.series_id, mediatorId, fromDate: dateStr })
+      setStep('confirm_series_edit')
+    }
+  }
+
+  async function confirmSeriesEdit() {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    await createSeries.mutateAsync({ mediatorId, date: dateStr, period, status, notes, frequency, endDate: endDate || null })
+    onClose()
+  }
+
+  async function handleDelete() {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    if (slot?.source === 'explicit') {
+      await deleteSlot.mutateAsync({ slotId: slot.id, mediatorId })
+    } else if (slot?.source === 'series') {
+      setStep('confirm_delete_series')
+      return
     }
     onClose()
   }
 
-  const saving = upsert.isPending || createSeries.isPending ||
-                 deleteSlot.isPending || deleteException.isPending || deactivateSeries.isPending
+  async function confirmDeleteSeries(scope) {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    if (scope === 'one') {
+      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.id })
+    } else {
+      await deactivateSeries.mutateAsync({ seriesId: slot.id, fromDate: dateStr, mediatorId })
+    }
+    onClose()
+  }
 
-  const showConflictWarning = mode === 'recurring' && fullDay && canFullDay
-
-  // ── Header subtitle ────────────────────────────────────────
-  const headerSub = (() => {
-    if (step === 'confirm_series_edit')   return 'Recurring slot — apply to…'
-    if (step === 'confirm_delete')        return 'Confirm deletion'
-    if (step === 'confirm_delete_series') return 'Delete recurring slot'
-    if (fullDay && canFullDay) return mode === 'recurring' ? 'Full day · recurring' : 'Full day'
-    return period
-  })()
+  const saving = upsert.isPending || createSeries.isPending || deleteSlot.isPending || deleteException.isPending || deactivateSeries.isPending
+  const dayOfWeek = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][((getDay(date) + 6) % 7)]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
       <div ref={ref} onClick={e => e.stopPropagation()}
-        className="bg-white rounded-lg shadow-popover border border-cedr-border w-80 overflow-hidden">
+        className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-2xl overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-cedr-border">
           <div>
             <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
-            <p className="text-xs text-cedr-muted capitalize">{headerSub}</p>
+            <p className="text-xs text-cedr-muted capitalize">
+              {fullDay ? 'Full day' : period}
+              {isFromSeries && ' · Recurring'}
+            </p>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light">
             <X size={14} className="text-cedr-muted" />
           </button>
         </div>
 
-        {/* ── Series edit scope ── */}
+        {/* ── confirm series edit ── */}
         {step === 'confirm_series_edit' && (
           <div className="p-5 space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-cedr-navy">
-              <Repeat size={15} className="text-amber-600" />
-              This is a recurring slot
-            </div>
-            <p className="text-xs text-cedr-muted leading-relaxed">
-              Apply this change only to <strong>{format(date, 'EEE d MMM')}</strong>, or to all future occurrences?
+            <p className="text-sm font-medium text-cedr-navy flex items-center gap-2">
+              <Repeat size={15} />How should this apply?
             </p>
-            <div className="space-y-2">
-              <button onClick={() => handleSeriesEditConfirm('this')} disabled={saving}
-                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors">
-                <p className="text-sm font-medium text-cedr-text">This slot only</p>
-                <p className="text-xs text-cedr-muted mt-0.5">Only {format(date, 'EEE d MMM')} will be updated</p>
+            {[
+              { label: `This ${period} only`,    scope: 'one'    },
+              { label: 'This and future slots',   scope: 'future' },
+            ].map(({ label, scope }) => (
+              <button key={scope} onClick={() => { setMode(scope === 'one' ? 'one_time' : 'from_here'); confirmSeriesEdit() }}
+                disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light text-sm transition-colors disabled:opacity-50">
+                {label}
               </button>
-              <button onClick={() => handleSeriesEditConfirm('all')} disabled={saving}
-                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-cedr-light transition-colors">
-                <p className="text-sm font-medium text-cedr-text">All future slots</p>
-                <p className="text-xs text-cedr-muted mt-0.5">All upcoming occurrences will be updated</p>
-              </button>
-            </div>
-            <button onClick={() => setStep('edit')}
-              className="text-xs text-cedr-muted hover:text-cedr-text w-full text-center">← Back</button>
+            ))}
+            <button onClick={() => setStep('edit')} className="btn-secondary w-full text-sm">Back</button>
           </div>
         )}
 
-        {/* ── Delete unique confirmation ── */}
-        {step === 'confirm_delete' && (
-          <div className="p-5 space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-red-700">
-              <Trash2 size={15} />
-              Delete this slot?
-            </div>
-            <p className="text-xs text-cedr-muted leading-relaxed">
-              This will permanently remove the <strong>{period}</strong> slot on <strong>{format(date, 'EEE d MMM')}</strong>.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setStep('edit')} className="btn-secondary flex-1 text-xs">Cancel</button>
-              <button onClick={handleDeleteConfirm} disabled={saving}
-                className="flex-1 text-xs px-4 py-2 rounded font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50">
-                {saving ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Delete series confirmation ── */}
+        {/* ── confirm delete series ── */}
         {step === 'confirm_delete_series' && (
           <div className="p-5 space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-red-700">
-              <Trash2 size={15} />
-              Delete recurring slot
-            </div>
-            <p className="text-xs text-cedr-muted leading-relaxed">
-              Remove this occurrence only, or all future occurrences of this recurring slot?
+            <p className="text-sm font-medium text-red-700 flex items-center gap-2">
+              <AlertTriangle size={15} />Delete which occurrences?
             </p>
-            <div className="space-y-2">
-              <button onClick={() => handleDeleteSeriesConfirm('this')} disabled={saving}
-                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-red-50 hover:border-red-200 transition-colors">
-                <p className="text-sm font-medium text-cedr-text">This slot only</p>
-                <p className="text-xs text-cedr-muted mt-0.5">Only {format(date, 'EEE d MMM')} · {period} will be removed</p>
+            {[
+              { label: `This ${period} only`,    scope: 'one'    },
+              { label: 'This and future slots',  scope: 'future' },
+            ].map(({ label, scope }) => (
+              <button key={scope} onClick={() => confirmDeleteSeries(scope)}
+                disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-red-200 bg-red-50 hover:bg-red-100 text-sm text-red-800 transition-colors disabled:opacity-50">
+                {label}
               </button>
-              <button onClick={() => handleDeleteSeriesConfirm('all')} disabled={saving}
-                className="w-full text-left px-4 py-3 rounded border border-cedr-border hover:bg-red-50 hover:border-red-200 transition-colors">
-                <p className="text-sm font-medium text-cedr-text">All future slots</p>
-                <p className="text-xs text-cedr-muted mt-0.5">Recurring rule ends before {format(date, 'EEE d MMM')}</p>
-              </button>
-            </div>
-            <button onClick={() => setStep('edit')}
-              className="text-xs text-cedr-muted hover:text-cedr-text w-full text-center">← Back</button>
+            ))}
+            <button onClick={() => setStep('edit')} className="btn-secondary w-full text-sm">Back</button>
           </div>
         )}
 
-        {/* ── Booked: read only ── */}
-        {step === 'edit' && isBooked && (
-          <div className="p-4 space-y-3">
-            <div className={clsx('status-badge border', SLOT_STATUSES[slot.status]?.color)}>
-              {SLOT_STATUSES[slot.status]?.label}
-            </div>
-            {slot.cases && (
-              <div className="bg-cedr-light rounded p-3 text-xs space-y-1">
-                <p className="font-semibold text-cedr-navy">{slot.cases.case_name || `Case #${slot.cases.hubspot_deal_id}`}</p>
-                {slot.cases.raw_hs_data?.venue   && <p className="text-cedr-muted">📍 {slot.cases.raw_hs_data.venue}</p>}
-                {slot.cases.raw_hs_data?.parties && <p className="text-cedr-muted">👥 {slot.cases.raw_hs_data.parties} parties</p>}
+        {/* ── main edit ── */}
+        {step === 'edit' && (
+          <div className="p-5 space-y-4">
+            {isBooked ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded">
+                <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                <p className="text-sm font-semibold text-purple-800">
+                  {slot.status === 'confirmed' ? 'Confirmed' : 'Provisionally Booked'}
+                </p>
               </div>
-            )}
-            {slot.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
-          </div>
-        )}
-
-        {/* ── Edit form ── */}
-        {step === 'edit' && !isBooked && (
-          <>
-            <div className="p-4 space-y-4">
-              {isFromSeries && (
-                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                  <Repeat size={12} />
-                  Recurring slot — you'll choose the scope on save
-                </div>
-              )}
-
-              {canFullDay && (
-                <label className={clsx(
-                  'flex items-center justify-between p-3 rounded border cursor-pointer transition-all select-none',
-                  fullDay ? 'border-cedr-navy bg-cedr-light' : 'border-cedr-border hover:border-cedr-navy/30'
-                )}>
-                  <div className="flex items-center gap-2">
-                    <Sun size={14} className={fullDay ? 'text-cedr-navy' : 'text-cedr-muted'} />
-                    <span className={clsx('text-sm font-medium', fullDay ? 'text-cedr-navy' : 'text-cedr-text')}>Full day</span>
-                    <span className="text-xs text-cedr-muted">— sets AM & PM at once</span>
+            ) : (
+              <>
+                {/* Status picker */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-cedr-muted uppercase tracking-wide">Status</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {editableStatuses.map(s => {
+                      const m = SLOT_STATUSES[s]
+                      return (
+                        <button key={s} onClick={() => setStatus(s)}
+                          className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-all',
+                            status === s ? `${m.color} border-current shadow-sm` : 'border-cedr-border text-cedr-muted hover:border-cedr-muted')}>
+                          <div className={`w-2 h-2 rounded-full ${m.dot}`} />{m.label}
+                        </button>
+                      )
+                    })}
                   </div>
-                  <div className={clsx('w-9 h-5 rounded-full transition-colors relative', fullDay ? 'bg-cedr-navy' : 'bg-cedr-border')}>
-                    <div className={clsx('absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform', fullDay ? 'translate-x-4' : 'translate-x-0.5')} />
-                  </div>
-                  <input type="checkbox" checked={fullDay} onChange={e => setFullDay(e.target.checked)} className="sr-only" />
-                </label>
-              )}
-
-              {showConflictWarning && (
-                <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2.5">
-                  <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
-                  <span className="leading-relaxed">
-                    Two recurring rules will be created (AM & PM). Dates that already have individual slots set will <strong>not</strong> be affected.
-                  </span>
                 </div>
-              )}
 
-              <div>
-                <p className="text-xs font-medium text-cedr-muted mb-2 uppercase tracking-wide">Status</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {EDITABLE_STATUSES.map(s => (
-                    <button key={s} onClick={() => setStatus(s)}
-                      className={clsx(
-                        'px-2 py-2 rounded text-xs font-medium border transition-all',
-                        status === s
-                          ? SLOT_STATUSES[s].color + ' ring-2 ring-offset-1 ring-cedr-navy/30'
-                          : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30'
-                      )}>
-                      {SLOT_STATUSES[s].label}
-                    </button>
-                  ))}
+                {/* Full day (new slots only) */}
+                {canFullDay && (
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={fullDay} onChange={e => setFullDay(e.target.checked)}
+                      className="accent-cedr-navy" />
+                    <Sun size={14} className="text-cedr-muted" />
+                    <span className="text-sm text-cedr-text">Full day (AM + PM)</span>
+                  </label>
+                )}
+
+                {/* Notes */}
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-cedr-muted uppercase tracking-wide">Notes</p>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                    placeholder="Optional note…" rows={2} className="input text-xs resize-none" />
                 </div>
-              </div>
 
-              <div>
-                <p className="text-xs font-medium text-cedr-muted mb-1 uppercase tracking-wide">Notes</p>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  placeholder="Optional context visible to CEDR team…"
-                  rows={2} className="input text-xs resize-none" />
-              </div>
-
-              {!isFromSeries && (
-                <div>
-                  <p className="text-xs font-medium text-cedr-muted mb-2 uppercase tracking-wide">Repeat</p>
-                  <div className="flex gap-1.5">
-                    {[{ value: 'one_time', label: 'One time' }, { value: 'recurring', label: 'Recurring' }].map(opt => (
-                      <button key={opt.value} onClick={() => setMode(opt.value)}
-                        className={clsx(
-                          'flex-1 py-1.5 rounded text-xs font-medium border transition-all',
-                          mode === opt.value
-                            ? 'bg-cedr-navy text-white border-cedr-navy'
-                            : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30'
-                        )}>
-                        {opt.value === 'recurring' && <Repeat size={10} className="inline mr-1" />}
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  {mode === 'recurring' && (
-                    <div className="mt-3 space-y-2">
-                      <div>
-                        <p className="text-xs text-cedr-muted mb-1">Frequency</p>
-                        <select value={frequency} onChange={e => setFreq(e.target.value)} className="input text-xs">
-                          {RECURRENCE_FREQUENCIES.map(f => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <p className="text-xs text-cedr-muted mb-1">End date <span className="opacity-60">(optional)</span></p>
-                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="input text-xs" />
-                      </div>
+                {/* Recurrence */}
+                {isNew && !isFromSeries && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-cedr-muted uppercase tracking-wide">Recurrence</p>
+                    <div className="flex gap-2">
+                      {[{ value: 'one_time', label: 'Once' }, { value: 'recurring', label: 'Recurring' }].map(opt => (
+                        <button key={opt.value} onClick={() => setMode(opt.value)}
+                          className={clsx('flex-1 py-1.5 rounded border text-xs font-medium transition-colors',
+                            mode === opt.value ? 'bg-cedr-navy text-white border-cedr-navy' : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30')}>
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                    {mode === 'recurring' && (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          {RECURRENCE_FREQUENCIES.map(f => (
+                            <button key={f.value} onClick={() => setFreq(f.value)}
+                              className={clsx('py-1.5 rounded border text-xs transition-colors',
+                                frequency === f.value ? 'bg-cedr-navy text-white border-cedr-navy' : 'border-cedr-border text-cedr-muted hover:border-cedr-navy/30')}>
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-cedr-muted whitespace-nowrap">Every {dayOfWeek} until</span>
+                          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                            className="input text-xs flex-1" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
 
             {/* Footer */}
-            <div className="flex gap-2 px-4 pb-4">
-              {/* Delete button — only when an actual slot/series exists */}
-              {canDelete && (
-                <button
-                  onClick={() => setStep(isFromSeries ? 'confirm_delete_series' : 'confirm_delete')}
-                  className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
-                  title="Delete this slot"
-                >
+            <div className="flex items-center gap-2 pt-1">
+              {canDelete && !isBooked && (
+                <button onClick={handleDelete} disabled={saving}
+                  className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
                   <Trash2 size={14} />
                 </button>
               )}
-              <button onClick={onClose} className="btn-secondary flex-1 text-xs">Cancel</button>
-              <button onClick={handleSave} disabled={saving || status === 'not_set'} className="btn-primary flex-1 text-xs">
-                {saving           ? 'Saving…'
-                  : mode === 'recurring' && fullDay ? 'Save recurring full day'
-                  : fullDay && canFullDay            ? 'Save full day'
-                  : 'Save'}
+              <button onClick={onClose} className={clsx('btn-secondary text-sm', canDelete && !isBooked ? 'flex-1' : 'w-full')}>
+                {isBooked ? 'Close' : 'Cancel'}
               </button>
+              {!isBooked && (
+                <button onClick={handleSave} disabled={saving || status === 'not_set'}
+                  className="flex-1 text-sm px-4 py-2 rounded font-medium bg-cedr-navy text-white hover:bg-cedr-navy/90 transition-colors disabled:opacity-50">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              )}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

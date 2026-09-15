@@ -302,6 +302,55 @@ export function useDeleteSlot() {
   })
 }
 
+// CRA: create a pencilled slot linked to a case
+export function usePencilSlot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, date, period, fullDay, caseData, hubspotMediatorId }) => {
+      const userId  = (await supabase.auth.getUser()).data.user?.id
+      const periods = fullDay ? ['morning', 'afternoon'] : [period]
+
+      for (const p of periods) {
+        const { error } = await supabase.from('availability_slots').upsert({
+          mediator_id:         mediatorId,
+          date,
+          period:              p,
+          status:              'pencilled',
+          notes:               null,
+          series_id:           null,
+          is_exception:        false,
+          created_by:          userId,
+          updated_by:          userId,
+          case_id:             caseData?.case_id     || null,
+          hubspot_record_id:   caseData?.record_id   || null,
+          hubspot_object_type: caseData?.object_type || null,
+          record_name:         caseData?.record_name || null,
+        }, { onConflict: 'mediator_id,date,period' })
+        if (error) throw error
+      }
+
+      await fetch(MAKE_WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          event:                      'slot_pencilled',
+          mediator_id:                mediatorId,
+          hubspot_mediator_object_id: hubspotMediatorId || null,
+          slot_date:                  date,
+          slot_time:                  fullDay ? 'full_day' : period,
+          case_id:                    caseData?.case_id     || null,
+          hubspot_record_id:          caseData?.record_id   || null,
+          hubspot_object_type:        caseData?.object_type || null,
+          record_name:                caseData?.record_name || null,
+        }),
+      }).catch(() => {})
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
+    },
+  })
+}
+
 // Mark a single occurrence of a series as deleted (inserts a 'deleted' exception)
 export function useDeleteSeriesException() {
   const qc = useQueryClient()

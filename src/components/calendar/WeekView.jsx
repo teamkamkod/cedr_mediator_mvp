@@ -3,13 +3,12 @@ import { startOfWeek, endOfWeek, eachDayOfInterval, format, isToday } from 'date
 import { clsx } from 'clsx'
 import SlotCell from './SlotCell'
 import SlotPopover from './SlotPopover'
-import CRASlotPopover from './CRASlotPopover'
 import { resolveSlot } from '../../hooks/useAvailability'
 import { SLOT_STATUSES } from '../../lib/constants'
 import { useAuth } from '../../lib/auth'
 import { isPastDate } from '../../lib/dateUtils'
 
-const CRA_BOOKABLE = ['not_set', 'available']
+const CRA_BOOKABLE = ['not_set', 'available'] // used for select mode only
 
 function canMerge(am, pm) {
   if (!am || !pm) return false
@@ -173,13 +172,8 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
       )}
 
       {popover && (
-        isCRA ? (
-          <CRASlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
-            mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
-        ) : (
-          <SlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
-            mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
-        )
+        <SlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
+          mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
       )}
     </div>
   )

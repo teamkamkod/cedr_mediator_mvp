@@ -5,7 +5,6 @@ import {
 } from 'date-fns'
 import { clsx } from 'clsx'
 import SlotPopover from './SlotPopover'
-import CRASlotPopover from './CRASlotPopover'
 import { resolveSlot } from '../../hooks/useAvailability'
 import { SLOT_STATUSES } from '../../lib/constants'
 import { useAuth } from '../../lib/auth'
@@ -178,13 +177,8 @@ export default function MonthView({ currentDate, slots, series, mediatorId, sele
       </div>
 
       {popover && (
-        isCRA ? (
-          <CRASlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
-            mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
-        ) : (
-          <SlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
-            mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
-        )
+        <SlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
+          mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
       )}
     </div>
   )
