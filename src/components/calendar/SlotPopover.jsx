@@ -25,7 +25,18 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
 
   const [step,         setStep]         = useState('view')  // 'view'|'edit_status'|'pencil_form'|'provisional_form'|'confirm_overwrite'
   const [craStatus,    setCraStatus]    = useState(null)    // chosen status in edit_status step
-  const [localCase,    setLocalCase]    = useState(null)
+  const [localCase,    setLocalCase]    = useState(() => {
+    // Carry forward case context from existing slot (pencilled / provisional)
+    if (slot?.case_id) {
+      return {
+        case_id:     slot.case_id,
+        record_id:   slot.hubspot_record_id   || null,
+        object_type: slot.hubspot_object_type || 'deal',
+        record_name: slot.record_name         || slot.case_id,
+      }
+    }
+    return selectedCase || null
+  })
   const [craFullDay,   setCraFullDay]   = useState(false)
   const [sendEmail,    setSendEmail]    = useState(false)
   const [message,      setMessage]      = useState('')
