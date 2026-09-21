@@ -90,7 +90,7 @@ export default function SettingsPage() {
         ) : hsError ? (
           <div className="flex items-center gap-2 px-5 py-6 text-red-600">
             <AlertTriangle size={15} className="shrink-0" />
-            <p className="text-sm">{(hsError as Error).message}</p>
+            <p className="text-sm">{hsError?.message || String(hsError)}</p>
           </div>
         ) : hsOptions.length === 0 ? (
           <p className="px-5 py-6 text-sm text-cedr-muted">No options found for case_type.</p>
