@@ -91,6 +91,9 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
           ) : (
             <>
               <Field label="POC"              value={data?.poc_name} />
+              {/* DEBUG — remove after POC resolved */}
+              <Field label="[debug] owner_id"  value={data?._debug_owner_id} />
+              <Field label="[debug] owner_raw" value={JSON.stringify(data?._debug_owner_raw)} />
               <Field label="Case Reference #" value={data?.enquiry_id} />
               <Field label="Case Type" value={
                 data?.case_type
