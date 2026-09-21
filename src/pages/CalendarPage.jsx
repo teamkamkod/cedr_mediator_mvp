@@ -12,6 +12,7 @@ import FloatingActionBar   from '../components/calendar/FloatingActionBar'
 import BatchStatusPopover  from '../components/calendar/BatchStatusPopover'
 import CRABatchPopover     from '../components/calendar/CRABatchPopover'
 import ManageClerksModal   from '../components/calendar/ManageClerksModal'
+import SetPeriodModal      from '../components/calendar/SetPeriodModal'
 import { SLOT_STATUSES }   from '../lib/constants'
 
 export default function CalendarPage() {
@@ -20,6 +21,7 @@ export default function CalendarPage() {
 
   const [showUpdateModal,  setShowUpdateModal]  = useState(false)
   const [showManageClerks, setShowManageClerks] = useState(false)
+  const [showSetPeriod,    setShowSetPeriod]    = useState(false)
   const [selectMode,       setSelectMode]       = useState(false)
   const [selectedSlots,    setSelectedSlots]    = useState([])
   const [showBatchPopover, setShowBatchPopover] = useState(false)
@@ -79,6 +81,7 @@ export default function CalendarPage() {
         currentDate={currentDate} setCurrentDate={setCurrentDate}
         onRequestUpdate={() => setShowUpdateModal(true)}
         onManageClerks={() => setShowManageClerks(true)}
+        onSetPeriod={() => setShowSetPeriod(true)}
         selectMode={selectMode}
         onToggleSelectMode={toggleSelectMode}
         selectedCount={selectedSlots.length}
@@ -147,6 +150,12 @@ export default function CalendarPage() {
           mediatorId={mediatorId}
           mediatorName={activeMediatorProfile.full_name}
           onClose={() => setShowManageClerks(false)}
+        />
+      )}
+      {showSetPeriod && (
+        <SetPeriodModal
+          mediatorId={mediatorId}
+          onClose={() => setShowSetPeriod(false)}
         />
       )}
     </div>

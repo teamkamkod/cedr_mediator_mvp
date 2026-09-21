@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { differenceInCalendarWeeks, parseISO, getDay, getDate, format, subDays } from 'date-fns'
+import { differenceInCalendarWeeks, parseISO, getDay, getDate, format, subDays, eachDayOfInterval } from 'date-fns'
 
 // Resolves slot data for a given date + period
 // Priority: explicit slot > recurring series > not_set
@@ -486,6 +486,65 @@ export function useCreateSeries() {
     },
     onSuccess: (_, { mediator_id }) => {
       qc.invalidateQueries({ queryKey: ['series', mediator_id] })
+    },
+  })
+}
+
+// Bulk upsert all slots in a date range with a given status.
+// Skips slots already provisionally_booked or confirmed.
+export function useBulkUpsertPeriod() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, startDate, endDate, status, includeWeekends }) => {
+      const userId = (await supabase.auth.getUser()).data.user?.id
+
+      // 1. Fetch existing blocked slots in range
+      const { data: existing } = await supabase
+        .from('availability_slots')
+        .select('date, period')
+        .eq('mediator_id', mediatorId)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .in('status', ['provisionally_booked', 'confirmed'])
+
+      const blocked = new Set((existing || []).map(s => `${s.date}-${s.period}`))
+
+      // 2. Generate all dates in range, optionally filter weekends
+      const dates = eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) })
+        .filter(d => includeWeekends || (d.getDay() !== 0 && d.getDay() !== 6))
+
+      // 3. Build upsert records, skip blocked
+      const records = []
+      for (const d of dates) {
+        const dateStr = format(d, 'yyyy-MM-dd')
+        for (const period of ['morning', 'afternoon']) {
+          if (blocked.has(`${dateStr}-${period}`)) continue
+          records.push({
+            mediator_id:  mediatorId,
+            date:         dateStr,
+            period,
+            status,
+            notes:        null,
+            series_id:    null,
+            is_exception: false,
+            updated_by:   userId,
+            created_by:   userId,
+          })
+        }
+      }
+
+      if (records.length === 0) return { count: 0, skipped: blocked.size }
+
+      // 4. Batch upsert in one call
+      const { error } = await supabase
+        .from('availability_slots')
+        .upsert(records, { onConflict: 'mediator_id,date,period' })
+      if (error) throw error
+
+      return { count: records.length, skipped: blocked.size }
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
     },
   })
 }

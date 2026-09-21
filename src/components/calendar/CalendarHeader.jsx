@@ -1,5 +1,5 @@
 import { format, addWeeks, subWeeks, addMonths, subMonths, startOfWeek, endOfWeek, formatDistanceToNow, differenceInDays } from 'date-fns'
-import { ChevronLeft, ChevronRight, Bell, MousePointerClick, CalendarDays, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Bell, MousePointerClick, CalendarDays, Users, CalendarRange } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../lib/auth'
 import { useLastCalendarUpdate } from '../../hooks/useAvailability'
@@ -38,7 +38,7 @@ function LastUpdateBadge({ mediatorId }) {
 export default function CalendarHeader({
   view, setView, currentDate, setCurrentDate,
   onRequestUpdate, selectMode, onToggleSelectMode, selectedCount,
-  showWeekends, onToggleWeekends, onManageClerks,
+  showWeekends, onToggleWeekends, onManageClerks, onSetPeriod,
 }) {
   const { activeMediatorProfile, isSuperAdmin, isCRA } = useAuth()
 
@@ -84,6 +84,11 @@ export default function CalendarHeader({
           )}>
           <MousePointerClick size={13} />
           {selectMode ? selectedCount > 0 ? `${selectedCount} selected` : 'Selecting…' : 'Select'}
+        </button>
+        <button onClick={onSetPeriod} title="Set status for a date range"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium border border-cedr-border text-cedr-muted hover:border-cedr-navy/30 hover:text-cedr-navy transition-all">
+          <CalendarRange size={13} />
+          Set period
         </button>
       </div>
 
