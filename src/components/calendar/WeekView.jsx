@@ -7,6 +7,7 @@ import { resolveSlot } from '../../hooks/useAvailability'
 import { SLOT_STATUSES } from '../../lib/constants'
 import { useAuth } from '../../lib/auth'
 import { isPastDate } from '../../lib/dateUtils'
+import DealInfoModal from '../common/DealInfoModal'
 
 const CRA_BOOKABLE = ['not_set', 'available'] // used for select mode only
 
@@ -49,7 +50,8 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past }) {
 }
 
 export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [], onToggleHighlight = null }) {
-  const [popover, setPopover] = useState(null)
+  const [popover,    setPopover]    = useState(null)
+  const [dealModal,  setDealModal]  = useState(null) // { recordId, recordName }
   const { isCRA } = useAuth()
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
@@ -147,12 +149,14 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                     onClick={() => handleCellClick(day, 'morning')}
                     selectMode={selectMode} selected={amSel} past={past}
                     highlighted={amHigh}
-                    dimmed={highlightedSlots.length > 0 && !amHigh && !amSel} />
+                    dimmed={highlightedSlots.length > 0 && !amHigh && !amSel}
+                    onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                   <SlotCell slotData={pmSlot} period="afternoon"
                     onClick={() => handleCellClick(day, 'afternoon')}
                     selectMode={selectMode} selected={pmSel} past={past}
                     highlighted={pmHigh}
-                    dimmed={highlightedSlots.length > 0 && !pmHigh && !pmSel} />
+                    dimmed={highlightedSlots.length > 0 && !pmHigh && !pmSel}
+                    onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                 </>
               )}
             </div>
@@ -174,6 +178,10 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
       {popover && (
         <SlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
           mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
+      )}
+      {dealModal && (
+        <DealInfoModal recordId={dealModal.recordId} recordName={dealModal.recordName}
+          onClose={() => setDealModal(null)} />
       )}
     </div>
   )

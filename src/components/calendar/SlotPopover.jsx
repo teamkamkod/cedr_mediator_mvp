@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, forwardRef } from 'react'
 import { format, getDay } from 'date-fns'
-import { X, Repeat, Sun, AlertTriangle, Trash2, Pencil, Mail } from 'lucide-react'
+import { X, Repeat, Sun, AlertTriangle, Trash2, Pencil, Mail, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SLOT_STATUSES, EDITABLE_STATUSES, CRA_EDITABLE_STATUSES, RECURRENCE_FREQUENCIES } from '../../lib/constants'
 import {
@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../../lib/auth'
 import { useCase } from '../../lib/CaseContext'
 import CaseDropdown from '../case/CaseDropdown'
+import DealInfoModal from '../common/DealInfoModal'
 
 // ─────────────────────────────────────────────────────────────
 // CRA ADAPTIVE SECTION — handles all CRA slot interactions
@@ -41,6 +42,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const [sendEmail,    setSendEmail]    = useState(false)
   const [message,      setMessage]      = useState('')
   const [confirmDel,   setConfirmDel]   = useState(false)
+  const [dealModal,    setDealModal]    = useState(false)
 
   const deleteSlot      = useDeleteSlot()
   const pencilSlot      = usePencilSlot()
@@ -179,7 +181,14 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
               <>
                 <div className="space-y-1">
                   {slot?.record_name && (
-                    <p className="text-xs text-cedr-muted">Case: <span className="font-medium text-cedr-text">{slot.record_name}</span></p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs text-cedr-muted">Case: <span className="font-medium text-cedr-text">{slot.record_name}</span></p>
+                      {slot?.hubspot_record_id && (
+                        <button onClick={() => setDealModal(true)} className="text-cedr-muted/50 hover:text-cedr-navy transition-colors" title="View case details">
+                          <Info size={12} />
+                        </button>
+                      )}
+                    </div>
                   )}
                   {slot?.case_id && <p className="text-xs text-cedr-muted">ID: {slot.case_id}</p>}
                   {slot?.notes && <p className="text-xs text-cedr-muted italic">{slot.notes}</p>}
@@ -203,10 +212,15 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
               <>
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 border border-purple-200 rounded">
                   <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-purple-800">Provisional Booking</p>
-                    {slot?.record_name && <p className="text-xs text-purple-600">{slot.record_name}</p>}
+                    {slot?.record_name && <p className="text-xs text-purple-600 truncate">{slot.record_name}</p>}
                   </div>
+                  {slot?.hubspot_record_id && (
+                    <button onClick={() => setDealModal(true)} className="text-purple-300 hover:text-purple-700 transition-colors shrink-0" title="View case details">
+                      <Info size={14} />
+                    </button>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
@@ -341,12 +355,12 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
           </div>
         )}
       </div>
+      {dealModal && slot?.hubspot_record_id && (
+        <DealInfoModal recordId={slot.hubspot_record_id} recordName={slot.record_name} onClose={() => setDealModal(false)} />
+      )}
     </div>
   )
 }
-
-// ─────────────────────────────────────────────────────────────
-// UNIFIED ENTRY POINT
 // ─────────────────────────────────────────────────────────────
 // step: 'edit' | 'confirm_series_edit' | 'confirm_delete' | 'confirm_delete_series'
 export default function SlotPopover({ slot, date, period, mediatorId, onClose, readOnly = false }) {

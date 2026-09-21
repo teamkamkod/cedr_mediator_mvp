@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle, Eye } from 'lucide-react'
+import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle, Eye, Info } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useRespondToBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 import { useCalendar } from '../../lib/CalendarContext'
+import DealInfoModal from '../common/DealInfoModal'
 
 function groupBookings(slots) {
   const groups = []
@@ -53,9 +54,13 @@ function groupBookings(slots) {
 
 // Individual row with inline confirmation
 function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
-  const [confirming, setConfirming] = useState(null)
+  const [confirming,  setConfirming]  = useState(null)
+  const [dealModal,   setDealModal]   = useState(false)
   const { setCurrentDate } = useCalendar()
   const navigate = useNavigate()
+
+  const recordId   = group.slots[0].hubspot_record_id
+  const recordName = group.slots[0].record_name
 
   async function handleConfirm() {
     const extraPayload = {
@@ -117,13 +122,21 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
       ) : (
         // Default row
         <div className="px-3 py-2 flex items-center justify-between">
-          <div className="text-sm">
-            <span className="font-medium">
+          <div className="flex items-center gap-1.5 text-sm min-w-0">
+            <span className="font-medium truncate">
               {group.slots[0].case_id
                 ? `Case #${group.slots[0].case_id.slice(0, 8)}`
                 : 'Mediation request'}
             </span>
-            <span className="text-white/70 ml-2 text-xs">{group.label}</span>
+            <span className="text-white/70 text-xs shrink-0">{group.label}</span>
+            {recordId && (
+              <button
+                onClick={() => setDealModal(true)}
+                className="p-0.5 rounded text-white/40 hover:text-white transition-colors shrink-0"
+                title="View case details">
+                <Info size={12} />
+              </button>
+            )}
           </div>
           <div className="flex gap-2 ml-4 shrink-0">
             <button onClick={handleView}
@@ -140,6 +153,9 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
             </button>
           </div>
         </div>
+      )}
+      {dealModal && recordId && (
+        <DealInfoModal recordId={recordId} recordName={recordName} onClose={() => setDealModal(false)} />
       )}
     </div>
   )

@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Repeat, Check } from 'lucide-react'
+import { Repeat, Check, Info } from 'lucide-react'
 import { SLOT_STATUSES } from '../../lib/constants'
 
 const statusStyles = {
@@ -11,7 +11,7 @@ const statusStyles = {
   not_set:              'bg-white border-cedr-border text-cedr-muted/50 hover:bg-cedr-light hover:border-cedr-muted/30',
 }
 
-export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false }) {
+export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false, onInfoClick = null }) {
   const { status = 'not_set', source, cases } = slotData || {}
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
 
@@ -80,6 +80,15 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
         </div>
       )}
 
+      {/* Info icon — top-right, shown when slot has a linked HubSpot deal */}
+      {onInfoClick && slotData?.hubspot_record_id && (
+        <button
+          onClick={e => { e.stopPropagation(); onInfoClick(slotData.hubspot_record_id, slotData.record_name) }}
+          className="absolute top-1.5 right-1.5 z-20 p-0.5 rounded text-cedr-muted/40 hover:text-cedr-navy hover:bg-white/80 transition-colors"
+          title="View case details">
+          <Info size={12} />
+        </button>
+      )}
       {past && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none z-10" />}
     </div>
   )
