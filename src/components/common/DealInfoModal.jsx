@@ -3,6 +3,7 @@ import { X, Loader2, AlertTriangle, Info } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/auth'
 
 function useCaseTypeLabels() {
   return useQuery({
@@ -46,6 +47,8 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
   const { data: caseTypeMap = {} } = useCaseTypeLabels()
+  const { isCRA, isSuperAdmin } = useAuth()
+  const showRawCaseType = isCRA || isSuperAdmin
 
   useEffect(() => {
     supabase.functions.invoke('get-deal-info', { body: { record_id: recordId } })
@@ -89,7 +92,13 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
             <>
               <Field label="POC"              value={data?.poc_name} />
               <Field label="Case Reference #" value={data?.enquiry_id} />
-              <Field label="Case Type"        value={data?.case_type ? (caseTypeMap[data.case_type] || data.case_type) : null} />
+              <Field label="Case Type" value={
+                data?.case_type
+                  ? showRawCaseType
+                    ? data.case_type  // CRA/admin: raw HubSpot value
+                    : (caseTypeMap[data.case_type] || data.case_type) // mediator/clerk: mapped label
+                  : null
+              } />
               <Field label="Date of Mediation" value={formatDate(data?.date)} />
               <Field label="Start Time"       value={formatTime(data?.start_time)} />
               <Field label="End Time"         value={formatTime(data?.end_time)} />
