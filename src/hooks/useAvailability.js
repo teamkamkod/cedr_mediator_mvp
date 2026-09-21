@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { differenceInCalendarWeeks, parseISO, getDay, getDate, format, subDays, eachDayOfInterval } from 'date-fns'
+import { buildSlotTimestamps } from '../lib/slotTime'
 
 // Resolves slot data for a given date + period
 // Priority: explicit slot > recurring series > not_set
@@ -152,18 +153,20 @@ export function useBatchUpsertSlots() {
     mutationFn: async ({ mediatorId, slots, status, notes }) => {
       const userId = (await supabase.auth.getUser()).data.user?.id
       await Promise.all(
-        slots.map(({ dateStr, period }) =>
-          supabase.from('availability_slots').upsert({
+        slots.map(({ dateStr, period }) => {
+          const { slot_start, slot_end } = buildSlotTimestamps(dateStr, period)
+          return supabase.from('availability_slots').upsert({
             mediator_id:  mediatorId,
             date:         dateStr,
-            period,
+            slot_start,
+            slot_end,
             status,
             notes:        notes || null,
             updated_by:   userId,
             created_by:   userId,
             group_id:     null,
-          }, { onConflict: 'mediator_id,date,period' })
-        )
+          }, { onConflict: 'mediator_id,slot_start' })
+        })
       )
     },
     onSuccess: (_, { mediatorId }) => {
@@ -192,21 +195,23 @@ export function useBatchCreateProvisionalBooking() {
       const groupId = crypto.randomUUID()
 
       await Promise.all(
-        slots.map(({ dateStr, period }) =>
-          supabase.from('availability_slots').upsert({
+        slots.map(({ dateStr, period }) => {
+          const { slot_start, slot_end } = buildSlotTimestamps(dateStr, period)
+          return supabase.from('availability_slots').upsert({
             mediator_id:          mediatorId,
             date:                 dateStr,
-            period,
+            slot_start,
+            slot_end,
             status:               'provisionally_booked',
             group_id:             groupId,
             created_by:           userId,
             updated_by:           userId,
-            case_id:              caseData?.case_id              || null,
-            hubspot_record_id:    caseData?.record_id            || null,
-            hubspot_object_type:  caseData?.object_type          || null,
-            record_name:          caseData?.record_name          || null,
-          }, { onConflict: 'mediator_id,date,period' })
-        )
+            case_id:              caseData?.case_id     || null,
+            hubspot_record_id:    caseData?.record_id   || null,
+            hubspot_object_type:  caseData?.object_type || null,
+            record_name:          caseData?.record_name || null,
+          }, { onConflict: 'mediator_id,slot_start' })
+        })
       )
 
       const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
@@ -241,19 +246,21 @@ export function useUpsertSlot() {
   return useMutation({
     mutationFn: async ({ mediatorId, date, period, status, notes, seriesId, isException }) => {
       const userId = (await supabase.auth.getUser()).data.user?.id
+      const { slot_start, slot_end } = buildSlotTimestamps(date, period)
       const { data, error } = await supabase
         .from('availability_slots')
         .upsert({
           mediator_id:  mediatorId,
           date,
-          period,
+          slot_start,
+          slot_end,
           status,
           notes:        notes || null,
           series_id:    seriesId || null,
           is_exception: isException || false,
           updated_by:   userId,
           created_by:   userId,
-        }, { onConflict: 'mediator_id,date,period' })
+        }, { onConflict: 'mediator_id,slot_start' })
         .select()
         .single()
       if (error) throw error
@@ -275,12 +282,14 @@ export function useCreateProvisionalBooking() {
       const periods  = fullDay ? ['morning', 'afternoon'] : [period]
 
       for (const p of periods) {
+        const { slot_start, slot_end } = buildSlotTimestamps(date, p)
         const { error } = await supabase
           .from('availability_slots')
           .upsert({
             mediator_id:         mediatorId,
             date,
-            period:              p,
+            slot_start,
+            slot_end,
             status:              'provisionally_booked',
             notes:               null,
             series_id:           null,
@@ -291,7 +300,7 @@ export function useCreateProvisionalBooking() {
             hubspot_record_id:   caseData?.record_id   || null,
             hubspot_object_type: caseData?.object_type || null,
             record_name:         caseData?.record_name || null,
-          }, { onConflict: 'mediator_id,date,period' })
+          }, { onConflict: 'mediator_id,slot_start' })
         if (error) throw error
       }
 
@@ -347,10 +356,12 @@ export function usePencilSlot() {
       const periods = fullDay ? ['morning', 'afternoon'] : [period]
 
       for (const p of periods) {
+        const { slot_start, slot_end } = buildSlotTimestamps(date, p)
         const { error } = await supabase.from('availability_slots').upsert({
           mediator_id:         mediatorId,
           date,
-          period:              p,
+          slot_start,
+          slot_end,
           status:              'pencilled',
           notes:               null,
           series_id:           null,
@@ -361,7 +372,7 @@ export function usePencilSlot() {
           hubspot_record_id:   caseData?.record_id   || null,
           hubspot_object_type: caseData?.object_type || null,
           record_name:         caseData?.record_name || null,
-        }, { onConflict: 'mediator_id,date,period' })
+        }, { onConflict: 'mediator_id,slot_start' })
         if (error) throw error
       }
 
@@ -392,16 +403,18 @@ export function useDeleteSeriesException() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ mediatorId, date, period, seriesId }) => {
+      const { slot_start, slot_end } = buildSlotTimestamps(date, period)
       const { error } = await supabase
         .from('availability_slots')
         .upsert({
           mediator_id:  mediatorId,
           date,
-          period,
+          slot_start,
+          slot_end,
           status:       'deleted',
           series_id:    seriesId,
           is_exception: true,
-        }, { onConflict: 'mediator_id,date,period' })
+        }, { onConflict: 'mediator_id,slot_start' })
       if (error) throw error
     },
     onSuccess: (_, { mediatorId }) => {
@@ -476,9 +489,13 @@ export function useCreateSeries() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (seriesData) => {
+      // Convert period → series_slot_start / series_slot_end
+      const { period, ...rest } = seriesData
+      const series_slot_start = period === 'morning' ? '08:00:00' : '14:00:00'
+      const series_slot_end   = period === 'morning' ? '12:00:00' : '18:00:00'
       const { data, error } = await supabase
         .from('recurring_series')
-        .insert(seriesData)
+        .insert({ ...rest, series_slot_start, series_slot_end })
         .select()
         .single()
       if (error) throw error
@@ -513,16 +530,18 @@ export function useBulkUpsertPeriod() {
       const dates = eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) })
         .filter(d => includeWeekends || (d.getDay() !== 0 && d.getDay() !== 6))
 
-      // 3. Build upsert records, skip blocked
+      // 3. Build upsert records with slot timestamps, skip blocked
       const records = []
       for (const d of dates) {
         const dateStr = format(d, 'yyyy-MM-dd')
         for (const period of ['morning', 'afternoon']) {
           if (blocked.has(`${dateStr}-${period}`)) continue
+          const { slot_start, slot_end } = buildSlotTimestamps(dateStr, period)
           records.push({
             mediator_id:  mediatorId,
             date:         dateStr,
-            period,
+            slot_start,
+            slot_end,
             status,
             notes:        null,
             series_id:    null,
@@ -538,7 +557,7 @@ export function useBulkUpsertPeriod() {
       // 4. Batch upsert in one call
       const { error } = await supabase
         .from('availability_slots')
-        .upsert(records, { onConflict: 'mediator_id,date,period' })
+        .upsert(records, { onConflict: 'mediator_id,slot_start' })
       if (error) throw error
 
       return { count: records.length, skipped: blocked.size }
