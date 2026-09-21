@@ -9,6 +9,8 @@ import { resolveSlot } from '../../hooks/useAvailability'
 import { SLOT_STATUSES } from '../../lib/constants'
 import { useAuth } from '../../lib/auth'
 import { isPastDate } from '../../lib/dateUtils'
+import DealInfoModal from '../common/DealInfoModal'
+import InfoBadge from '../common/InfoBadge'
 
 const CRA_BOOKABLE = ['not_set', 'available']
 const selectedStyle = 'bg-cedr-navy/10 border-cedr-navy ring-1 ring-cedr-navy/30'
@@ -28,7 +30,7 @@ function canMerge(am, pm) {
   return am.status === pm.status
 }
 
-function SlotBar({ slot, period, onClick, selected, past }) {
+function SlotBar({ slot, period, onClick, selected, past, onInfoClick }) {
   const cfg = SLOT_STATUSES[slot.status] || SLOT_STATUSES.not_set
   return (
     <div className="relative flex-1">
@@ -44,12 +46,18 @@ function SlotBar({ slot, period, onClick, selected, past }) {
           <span className="text-[10px] font-medium truncate">{cfg.label}</span>
         )}
       </button>
+      {onInfoClick && slot.hubspot_record_id && (
+        <div className="absolute bottom-0.5 right-0.5 z-20">
+          <InfoBadge recordId={slot.hubspot_record_id} recordName={slot.record_name}
+            onInfoClick={({ recordId, recordName }) => onInfoClick(recordId, recordName)} />
+        </div>
+      )}
       {past && <div className="absolute inset-0 bg-gray-400/25 pointer-events-none" />}
     </div>
   )
 }
 
-function MergedBar({ slot, onClick, selected, past }) {
+function MergedBar({ slot, onClick, selected, past, onInfoClick }) {
   const cfg = SLOT_STATUSES[slot.status] || SLOT_STATUSES.not_set
   return (
     <div className="relative flex-1">
@@ -63,13 +71,20 @@ function MergedBar({ slot, onClick, selected, past }) {
           <span className="text-[10px] font-medium truncate">{cfg.label}</span>
         )}
       </button>
+      {onInfoClick && slot.hubspot_record_id && (
+        <div className="absolute bottom-0.5 right-0.5 z-20">
+          <InfoBadge recordId={slot.hubspot_record_id} recordName={slot.record_name}
+            onInfoClick={({ recordId, recordName }) => onInfoClick(recordId, recordName)} />
+        </div>
+      )}
       {past && <div className="absolute inset-0 bg-gray-400/25 pointer-events-none" />}
     </div>
   )
 }
 
 export default function MonthView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends }) {
-  const [popover, setPopover] = useState(null)
+  const [popover,   setPopover]   = useState(null)
+  const [dealModal, setDealModal] = useState(null)
   const { isCRA } = useAuth()
 
   const monthStart = startOfMonth(currentDate)
@@ -159,15 +174,18 @@ export default function MonthView({ currentDate, slots, series, mediatorId, sele
                 {merged ? (
                   <MergedBar slot={amSlot}
                     onClick={() => handleCellClick(day, 'morning')}
-                    selected={amSel} past={past} />
+                    selected={amSel} past={past}
+                    onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                 ) : (
                   <>
                     <SlotBar slot={amSlot} period="morning"
                       onClick={() => handleCellClick(day, 'morning')}
-                      selected={amSel} past={past} />
+                      selected={amSel} past={past}
+                      onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                     <SlotBar slot={pmSlot} period="afternoon"
                       onClick={() => handleCellClick(day, 'afternoon')}
-                      selected={pmSel} past={past} />
+                      selected={pmSel} past={past}
+                      onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                   </>
                 )}
               </div>
@@ -179,6 +197,10 @@ export default function MonthView({ currentDate, slots, series, mediatorId, sele
       {popover && (
         <SlotPopover slot={popover.slotData} date={popover.date} period={popover.period}
           mediatorId={mediatorId} readOnly={popover.readOnly} onClose={() => setPopover(null)} />
+      )}
+      {dealModal && (
+        <DealInfoModal recordId={dealModal.recordId} recordName={dealModal.recordName}
+          onClose={() => setDealModal(null)} />
       )}
     </div>
   )

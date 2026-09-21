@@ -35,9 +35,9 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
   useEffect(() => {
     supabase.functions.invoke('get-deal-info', { body: { record_id: recordId } })
       .then(({ data, error }) => {
-        if (error)        setError(error.message)
+        if (error)            setError(error.message)
         else if (data?.error) setError(data.error)
-        else              setData(data)
+        else                  setData(data)
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -52,12 +52,7 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-cedr-border bg-cedr-light/50">
           <div className="flex items-center gap-2 min-w-0">
             <Info size={15} className="text-cedr-navy shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-cedr-navy truncate">{recordName || 'Case Details'}</p>
-              {data?.poc_name && (
-                <p className="text-xs text-cedr-muted mt-0.5">POC: {data.poc_name}</p>
-              )}
-            </div>
+            <p className="text-sm font-semibold text-cedr-navy truncate">{recordName || 'Case Details'}</p>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-cedr-light shrink-0 ml-2">
             <X size={14} className="text-cedr-muted" />
@@ -77,13 +72,14 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
             </div>
           ) : (
             <>
-              <Field label="Case Reference #"  value={data?.enquiry_id} />
-              <Field label="Case Type"         value={data?.case_type} />
+              <Field label="POC"              value={data?.poc_name} />
+              <Field label="Case Reference #" value={data?.enquiry_id} />
+              <Field label="Case Type"        value={data?.case_type} />
               <Field label="Date of Mediation" value={formatDate(data?.date)} />
-              <Field label="Start Time"        value={formatTime(data?.start_time)} />
-              <Field label="End Time"          value={formatTime(data?.end_time)} />
-              <Field label="Location"          value={data?.location} />
-              <Field label="Venue Address"     value={data?.venue_address} />
+              <Field label="Start Time"       value={formatTime(data?.start_time)} />
+              <Field label="End Time"         value={formatTime(data?.end_time)} />
+              <Field label="Location"         value={data?.location} />
+              <Field label="Venue Address"    value={data?.venue_address} />
             </>
           )}
         </div>

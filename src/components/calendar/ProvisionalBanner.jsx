@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle, Eye, Info } from 'lucide-react'
+import { Bell, Check, X, ChevronDown, ChevronUp, AlertTriangle, Eye } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useRespondToBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 import { useCalendar } from '../../lib/CalendarContext'
 import DealInfoModal from '../common/DealInfoModal'
+import InfoBadge from '../common/InfoBadge'
 
 function groupBookings(slots) {
   const groups = []
@@ -130,12 +131,12 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
             </span>
             <span className="text-white/70 text-xs shrink-0">{group.label}</span>
             {recordId && (
-              <button
-                onClick={() => setDealModal(true)}
-                className="p-0.5 rounded text-white/40 hover:text-white transition-colors shrink-0"
-                title="View case details">
-                <Info size={12} />
-              </button>
+              <InfoBadge
+                recordId={recordId}
+                recordName={recordName}
+                onInfoClick={() => setDealModal(true)}
+                className="bg-green-500 hover:bg-green-600"
+              />
             )}
           </div>
           <div className="flex gap-2 ml-4 shrink-0">

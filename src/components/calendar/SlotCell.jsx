@@ -1,6 +1,7 @@
 import { clsx } from 'clsx'
-import { Repeat, Check, Info } from 'lucide-react'
+import { Repeat, Check } from 'lucide-react'
 import { SLOT_STATUSES } from '../../lib/constants'
+import InfoBadge from '../common/InfoBadge'
 
 const statusStyles = {
   available:            'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
@@ -80,14 +81,15 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
         </div>
       )}
 
-      {/* Info icon — top-right, shown when slot has a linked HubSpot deal */}
+      {/* "More info" badge — bottom-right, visible when slot has a linked HubSpot deal */}
       {onInfoClick && slotData?.hubspot_record_id && (
-        <button
-          onClick={e => { e.stopPropagation(); onInfoClick(slotData.hubspot_record_id, slotData.record_name) }}
-          className="absolute top-1.5 right-1.5 z-20 p-0.5 rounded text-cedr-muted/40 hover:text-cedr-navy hover:bg-white/80 transition-colors"
-          title="View case details">
-          <Info size={12} />
-        </button>
+        <div className="absolute bottom-1.5 right-1.5 z-20">
+          <InfoBadge
+            recordId={slotData.hubspot_record_id}
+            recordName={slotData.record_name}
+            onInfoClick={({ recordId, recordName }) => onInfoClick(recordId, recordName)}
+          />
+        </div>
       )}
       {past && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none z-10" />}
     </div>

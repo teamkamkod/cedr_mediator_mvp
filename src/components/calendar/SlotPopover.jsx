@@ -12,6 +12,7 @@ import { useAuth } from '../../lib/auth'
 import { useCase } from '../../lib/CaseContext'
 import CaseDropdown from '../case/CaseDropdown'
 import DealInfoModal from '../common/DealInfoModal'
+import InfoBadge from '../common/InfoBadge'
 
 // ─────────────────────────────────────────────────────────────
 // CRA ADAPTIVE SECTION — handles all CRA slot interactions
@@ -181,12 +182,11 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
               <>
                 <div className="space-y-1">
                   {slot?.record_name && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs text-cedr-muted">Case: <span className="font-medium text-cedr-text">{slot.record_name}</span></p>
                       {slot?.hubspot_record_id && (
-                        <button onClick={() => setDealModal(true)} className="text-cedr-muted/50 hover:text-cedr-navy transition-colors" title="View case details">
-                          <Info size={12} />
-                        </button>
+                        <InfoBadge recordId={slot.hubspot_record_id} recordName={slot.record_name}
+                          onInfoClick={() => setDealModal(true)} />
                       )}
                     </div>
                   )}
@@ -217,9 +217,8 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                     {slot?.record_name && <p className="text-xs text-purple-600 truncate">{slot.record_name}</p>}
                   </div>
                   {slot?.hubspot_record_id && (
-                    <button onClick={() => setDealModal(true)} className="text-purple-300 hover:text-purple-700 transition-colors shrink-0" title="View case details">
-                      <Info size={14} />
-                    </button>
+                    <InfoBadge recordId={slot.hubspot_record_id} recordName={slot.record_name}
+                      onInfoClick={() => setDealModal(true)} />
                   )}
                 </div>
                 <div className="flex gap-2">
