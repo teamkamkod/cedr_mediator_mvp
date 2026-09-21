@@ -200,7 +200,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                 <div className="flex gap-2">
                   <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
                   <button onClick={() => { setCraStatus('pencilled'); setStep('confirm_overwrite') }}
-                    className="flex items-center gap-1.5 flex-1 text-sm px-3 py-2 rounded font-medium bg-slate-600 text-white hover:bg-slate-700 transition-colors">
+                    className="flex items-center gap-1.5 flex-1 text-sm px-3 py-2 rounded font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors">
                     <Pencil size={13} />Convert to Pencil
                   </button>
                 </div>
@@ -223,9 +223,9 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                     <span className="text-xs font-semibold text-red-800">Unavailable</span>
                   </button>
                   <button onClick={() => { setCraStatus('pencilled'); setStep('pencil_form') }}
-                    className="flex flex-col items-center gap-1 p-3 rounded border-2 border-slate-300 bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <Pencil size={14} className="text-slate-500" />
-                    <span className="text-xs font-semibold text-slate-700">Pencil</span>
+                    className="flex flex-col items-center gap-1 p-3 rounded border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 transition-colors">
+                    <Pencil size={14} className="text-amber-600" />
+                    <span className="text-xs font-semibold text-amber-800">Pencil</span>
                   </button>
                 </div>
                 <button onClick={() => { setCraStatus('provisional'); setStep('provisional_form') }}
@@ -268,9 +268,9 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         {/* ── PENCIL FORM ── */}
         {!confirmDel && step === 'pencil_form' && (
           <div className="p-5 space-y-4">
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-300 rounded">
-              <Pencil size={14} className="text-slate-500" />
-              <span className="text-sm font-semibold text-slate-700">Pencilling a slot</span>
+            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded">
+              <Pencil size={14} className="text-amber-600" />
+              <span className="text-sm font-semibold text-amber-800">Pencilling a slot</span>
             </div>
             <CaseDropdown onChange={setLocalCase} />
             <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -281,11 +281,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
             <div className="flex gap-2">
               <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
               <button onClick={() => {
-                // Check conflict if current slot is provisional_booked
-                if (isProvisional) { setStep('confirm_overwrite'); return }
+                // Conflict already resolved via confirm_overwrite step — go straight to pencil
                 handlePencil()
               }} disabled={saving || !localCase}
-                className="flex-1 text-sm px-4 py-2 rounded font-medium bg-slate-700 text-white hover:bg-slate-800 transition-colors disabled:opacity-50">
+                className="flex-1 text-sm px-4 py-2 rounded font-medium bg-amber-700 text-white hover:bg-amber-800 transition-colors disabled:opacity-50">
                 {saving ? 'Saving…' : 'Pencil slot'}
               </button>
             </div>
@@ -321,7 +320,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
             <div className="flex gap-2">
               <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
               <button onClick={() => {
-                if (isPencilled) { setStep('confirm_overwrite'); return }
+                // Conflict already resolved via confirm_overwrite step — go straight to book
                 handleProvisional()
               }} disabled={saving || !localCase}
                 className="flex-1 text-sm px-4 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50">
