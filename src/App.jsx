@@ -11,6 +11,7 @@ import ProfilePage        from './pages/ProfilePage'
 import AdminPage          from './pages/AdminPage'
 import MediatorSelectPage from './pages/MediatorSelectPage'
 import AvailabilityPage   from './pages/AvailabilityPage'
+import SettingsPage       from './pages/SettingsPage'
 import AppLayout          from './components/layout/AppLayout'
 
 function AuthCallbackHandler() {
@@ -70,6 +71,7 @@ export default function App() {
           <Route index          element={<CalendarPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="availability" element={<AvailabilityPage />} />
+          <Route path="settings"     element={<SettingsPage />} />
           <Route path="admin"   element={
             <ProtectedRoute adminOnly>
               <AdminPage />

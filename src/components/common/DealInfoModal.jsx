@@ -1,7 +1,21 @@
 import { useState, useEffect } from 'react'
 import { X, Loader2, AlertTriangle, Info } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+
+function useCaseTypeLabels() {
+  return useQuery({
+    queryKey:  ['case-type-labels'],
+    staleTime: 10 * 60 * 1000,
+    queryFn:   async () => {
+      const { data } = await supabase.from('case_type_labels').select('api_value, display_label')
+      const map = {}
+      for (const row of (data || [])) map[row.api_value] = row.display_label
+      return map
+    },
+  })
+}
 
 function Field({ label, value }) {
   return (
@@ -31,6 +45,7 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
+  const { data: caseTypeMap = {} } = useCaseTypeLabels()
 
   useEffect(() => {
     supabase.functions.invoke('get-deal-info', { body: { record_id: recordId } })
@@ -74,7 +89,7 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
             <>
               <Field label="POC"              value={data?.poc_name} />
               <Field label="Case Reference #" value={data?.enquiry_id} />
-              <Field label="Case Type"        value={data?.case_type} />
+              <Field label="Case Type"        value={data?.case_type ? (caseTypeMap[data.case_type] || data.case_type) : null} />
               <Field label="Date of Mediation" value={formatDate(data?.date)} />
               <Field label="Start Time"       value={formatTime(data?.start_time)} />
               <Field label="End Time"         value={formatTime(data?.end_time)} />

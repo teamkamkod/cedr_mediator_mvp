@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Calendar, User, Shield, LogOut, RefreshCw, HelpCircle, Search } from 'lucide-react'
+import { Calendar, User, Shield, LogOut, RefreshCw, HelpCircle, Search, Settings } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { clsx } from 'clsx'
@@ -80,6 +80,9 @@ export default function AppLayout() {
             <NavItem to="/availability" icon={<Search size={16} />} label="Search available mediators" />
           )}
           <NavItem to="/profile" icon={<User size={16} />} label="Profile" />
+          {isSuperAdmin && (
+            <NavItem to="/settings" icon={<Settings size={16} />} label="Settings" />
+          )}
           {isAdmin && (
             <NavItem to="/admin" icon={<Shield size={16} />} label="Admin" />
           )}
