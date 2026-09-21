@@ -90,10 +90,20 @@ export default function DealInfoModal({ recordId, recordName, onClose }) {
             </div>
           ) : (
             <>
-              <Field label="POC"              value={data?.poc_name} />
-              {/* DEBUG — remove after POC resolved */}
-              <Field label="[debug] owner_id"  value={data?._debug_owner_id} />
-              <Field label="[debug] owner_raw" value={JSON.stringify(data?._debug_owner_raw)} />
+              <Field label="POC" value={
+                data?.poc_name
+                  ? <span className="flex flex-col gap-0.5">
+                      <span>{data.poc_name}</span>
+                      {data?.poc_email && (
+                        <a href={`mailto:${data.poc_email}`}
+                          className="text-xs text-cedr-teal hover:text-cedr-navy hover:underline transition-colors"
+                          onClick={e => e.stopPropagation()}>
+                          {data.poc_email}
+                        </a>
+                      )}
+                    </span>
+                  : null
+              } />
               <Field label="Case Reference #" value={data?.enquiry_id} />
               <Field label="Case Type" value={
                 data?.case_type
