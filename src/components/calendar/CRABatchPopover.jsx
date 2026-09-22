@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Mail } from 'lucide-react'
+import { X, Mail, AlertTriangle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useBatchCreateProvisionalBooking } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
@@ -10,6 +10,7 @@ import CaseDropdown from '../case/CaseDropdown'
 export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, onDone, mediatorOverride = null }) {
   const [sendEmail, setSendEmail] = useState(false)
   const [message,   setMessage]   = useState('')
+  const [conflict,  setConflict]  = useState(false)
   const { activeMediatorProfile } = useAuth()
   const { selectedCase }          = useCase()
   const [localCase, setLocalCase] = useState(selectedCase) // may be pre-filled from CRM context
@@ -36,15 +37,20 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
   }
 
   async function handleBook() {
-    await createBatch.mutateAsync({
-      mediatorId,
-      slots:             sorted.map(s => ({ dateStr: s.dateStr, period: s.period })),
-      sendEmail,
-      message:           sendEmail ? message : null,
-      hubspotMediatorId: effectiveProfile?.hubspot_mediator_object_id,
-      caseData:          localCase,
-    })
-    onDone({ mediatorName: effectiveProfile?.full_name, slots: sorted })
+    setConflict(false)
+    try {
+      await createBatch.mutateAsync({
+        mediatorId,
+        slots:             sorted.map(s => ({ dateStr: s.dateStr, period: s.period })),
+        sendEmail,
+        message:           sendEmail ? message : null,
+        hubspotMediatorId: effectiveProfile?.hubspot_mediator_object_id,
+        caseData:          localCase,
+      })
+      onDone({ mediatorName: effectiveProfile?.full_name, slots: sorted })
+    } catch (err) {
+      if (err?.message === 'CASE_CONFLICT') setConflict(true)
+    }
   }
 
   return (
@@ -107,6 +113,12 @@ export default function CRABatchPopover({ selectedSlots, mediatorId, onClose, on
 
         <div className="flex gap-2 px-5 pb-5">
           <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
+          {conflict && (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded text-red-700">
+              <AlertTriangle size={14} className="shrink-0" />
+              <p className="text-xs">This case already has a confirmed or pending mediation date. Only one is allowed per case.</p>
+            </div>
+          )}
           <button onClick={handleBook} disabled={createBatch.isPending || !canBook}
             className="flex-1 text-sm px-4 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50">
             {createBatch.isPending ? 'Booking…' : `Book ${count} slot${count > 1 ? 's' : ''}`}

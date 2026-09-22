@@ -57,6 +57,7 @@ function groupBookings(slots) {
 function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
   const [confirming,  setConfirming]  = useState(null)
   const [dealModal,   setDealModal]   = useState(false)
+  const [conflictErr, setConflictErr] = useState(false)
   const { setCurrentDate } = useCalendar()
   const navigate = useNavigate()
 
@@ -69,16 +70,24 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
       slot_date:           group.date,
       slot_time:           group.isFullDay ? 'full_day' : group.slots[0].period,
       case_id:             group.slots[0].case_id             || null,
+      group_id:            group.slots[0].group_id            || null,  // for conflict exclusion
       hubspot_record_id:   group.slots[0].hubspot_record_id   || null,
       hubspot_object_type: group.slots[0].hubspot_object_type || null,
       record_name:         group.slots[0].record_name         || null,
     }
-    await Promise.all(
-      group.slots.map(slot =>
-        respond.mutateAsync({ slotId: slot.id, mediatorId, action: confirming, extraPayload })
+    try {
+      await Promise.all(
+        group.slots.map(slot =>
+          respond.mutateAsync({ slotId: slot.id, mediatorId, action: confirming, extraPayload })
+        )
       )
-    )
-    setConfirming(null)
+      setConfirming(null)
+    } catch (err) {
+      if (err?.message === 'CASE_CONFLICT') {
+        setConflictErr(true)
+        setConfirming(null)
+      }
+    }
   }
 
   function handleView() {
@@ -91,7 +100,19 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
 
   return (
     <div className="bg-white/10 rounded overflow-hidden">
-      {confirming ? (
+      {/* Conflict error state */}
+      {conflictErr ? (
+        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertTriangle size={13} className="text-amber-300 shrink-0" />
+            <span className="text-amber-200 text-xs">This case already has a confirmed or pending mediation date. Only one is allowed.</span>
+          </div>
+          <button onClick={() => setConflictErr(false)}
+            className="px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors shrink-0">
+            Close
+          </button>
+        </div>
+      ) : confirming ? (
         <div className="px-3 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <AlertTriangle size={13} className="text-white/70 shrink-0" />
@@ -101,21 +122,16 @@ function GroupRow({ group, mediatorId, hubspotMediatorId, respond }) {
             </span>
           </div>
           <div className="flex gap-1.5 shrink-0">
-            <button
-              onClick={() => setConfirming(null)}
-              className="px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors"
-            >
+            <button onClick={() => setConfirming(null)}
+              className="px-2.5 py-1 rounded text-xs font-medium bg-white/20 hover:bg-white/30 transition-colors">
               Cancel
             </button>
-            <button
-              onClick={handleConfirm}
-              disabled={respond.isPending}
+            <button onClick={handleConfirm} disabled={respond.isPending}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
                 confirming === 'accept'
                   ? 'bg-white text-purple-700 hover:bg-white/90'
                   : 'bg-red-500 text-white hover:bg-red-600'
-              }`}
-            >
+              }`}>
               {respond.isPending ? '…' : confirming === 'accept' ? 'Accept' : 'Decline'}
             </button>
           </div>

@@ -136,12 +136,26 @@ export function useProvisionalBookings(mediatorId) {
         .from('availability_slots')
         .select('id, date, period, status, notes, case_id, created_by, group_id, hubspot_record_id, hubspot_object_type, record_name')
         .eq('mediator_id', mediatorId)
-        .eq('status', 'provisionally_booked')
+        .eq('status', 'pencilled')   // ← show pencilled for accept/decline (not provisionally_booked)
         .order('date', { ascending: true })
       if (error) throw error
       return data
     },
   })
+}
+
+// Checks if a case already has a provisionally_booked or confirmed slot.
+// Pass excludeGroupId to avoid self-conflict when checking an existing group.
+export async function checkCaseConflict(caseId, excludeGroupId = null) {
+  if (!caseId) return false
+  let q = supabase
+    .from('availability_slots')
+    .select('id', { count: 'exact', head: true })
+    .eq('case_id', caseId)
+    .in('status', ['provisionally_booked', 'confirmed'])
+  if (excludeGroupId) q = q.neq('group_id', excludeGroupId)
+  const { count } = await q
+  return (count ?? 0) > 0
 }
 
 const MAKE_WEBHOOK = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
@@ -193,6 +207,10 @@ export function useBatchCreateProvisionalBooking() {
     mutationFn: async ({ mediatorId, slots, sendEmail, message, hubspotMediatorId, caseData }) => {
       const userId  = (await supabase.auth.getUser()).data.user?.id
       const groupId = crypto.randomUUID()
+
+      // Block if case already has a provisionally_booked or confirmed slot
+      const conflict = await checkCaseConflict(caseData?.case_id)
+      if (conflict) throw new Error('CASE_CONFLICT')
 
       await Promise.all(
         slots.map(({ dateStr, period }) => {
@@ -281,6 +299,10 @@ export function useCreateProvisionalBooking() {
       const userId   = (await supabase.auth.getUser()).data.user?.id
       const periods  = fullDay ? ['morning', 'afternoon'] : [period]
 
+      // Block if case already has a provisionally_booked or confirmed slot
+      const conflict = await checkCaseConflict(caseData?.case_id)
+      if (conflict) throw new Error('CASE_CONFLICT')
+
       for (const p of periods) {
         const { slot_start, slot_end } = buildSlotTimestamps(date, p)
         const { error } = await supabase
@@ -354,6 +376,10 @@ export function usePencilSlot() {
     mutationFn: async ({ mediatorId, date, period, fullDay, caseData, hubspotMediatorId }) => {
       const userId  = (await supabase.auth.getUser()).data.user?.id
       const periods = fullDay ? ['morning', 'afternoon'] : [period]
+
+      // Block if case already has a provisionally_booked or confirmed slot
+      const conflict = await checkCaseConflict(caseData?.case_id)
+      if (conflict) throw new Error('CASE_CONFLICT')
 
       for (const p of periods) {
         const { slot_start, slot_end } = buildSlotTimestamps(date, p)
@@ -447,12 +473,20 @@ export function useRespondToBooking() {
   return useMutation({
     mutationFn: async ({ slotId, mediatorId, action, extraPayload = {} }) => {
       if (action === 'accept') {
+        // Conflict check: block if case already has provisionally_booked or confirmed
+        const caseId   = extraPayload?.case_id
+        const groupId  = extraPayload?.group_id || null
+        const conflict = await checkCaseConflict(caseId, groupId)
+        if (conflict) throw new Error('CASE_CONFLICT')
+
+        // pencilled → provisionally_booked
         const { error } = await supabase
           .from('availability_slots')
-          .update({ status: 'confirmed' })
+          .update({ status: 'provisionally_booked' })
           .eq('id', slotId)
         if (error) throw error
       } else {
+        // decline → delete
         const { error } = await supabase
           .from('availability_slots')
           .delete()
@@ -460,7 +494,6 @@ export function useRespondToBooking() {
         if (error) throw error
       }
 
-      // Webhook fires for both accept and decline
       const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
                       || 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
       if (webhookUrl) {

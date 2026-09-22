@@ -14,6 +14,18 @@ import CaseDropdown from '../case/CaseDropdown'
 import DealInfoModal from '../common/DealInfoModal'
 import InfoBadge from '../common/InfoBadge'
 
+function ConflictError() {
+  return (
+    <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded">
+      <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+      <p className="text-xs text-red-700">
+        This case already has a confirmed or pending mediation date.
+        Only one provisionally booked slot is allowed per case.
+      </p>
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────
 // CRA ADAPTIVE SECTION — handles all CRA slot interactions
 // ─────────────────────────────────────────────────────────────
@@ -44,6 +56,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const [message,      setMessage]      = useState('')
   const [confirmDel,   setConfirmDel]   = useState(false)
   const [dealModal,    setDealModal]    = useState(false)
+  const [conflict,     setConflict]     = useState(false)
 
   const deleteSlot      = useDeleteSlot()
   const pencilSlot      = usePencilSlot()
@@ -69,18 +82,28 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
 
   async function handlePencil() {
     if (!localCase) return
-    await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
-    onClose()
+    setConflict(false)
+    try {
+      await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
+      onClose()
+    } catch (err) {
+      if (err?.message === 'CASE_CONFLICT') setConflict(true)
+    }
   }
 
   async function handleProvisional() {
     if (!localCase) return
-    await createProvis.mutateAsync({
-      mediatorId, date: dateStr, period, fullDay: craFullDay,
-      sendEmail, message: sendEmail ? message : null,
-      hubspotMediatorId: hubId, caseData: localCase,
-    })
-    onClose()
+    setConflict(false)
+    try {
+      await createProvis.mutateAsync({
+        mediatorId, date: dateStr, period, fullDay: craFullDay,
+        sendEmail, message: sendEmail ? message : null,
+        hubspotMediatorId: hubId, caseData: localCase,
+      })
+      onClose()
+    } catch (err) {
+      if (err?.message === 'CASE_CONFLICT') setConflict(true)
+    }
   }
 
   async function handleDelete() {
@@ -302,12 +325,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                 className="accent-cedr-navy" />
               <span className="text-sm text-cedr-text">Full day (AM + PM)</span>
             </label>
+            {conflict && <ConflictError />}
             <div className="flex gap-2">
-              <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
-              <button onClick={() => {
-                // Conflict already resolved via confirm_overwrite step — go straight to pencil
-                handlePencil()
-              }} disabled={saving || !localCase}
+              <button onClick={() => { setStep('view'); setConflict(false) }} className="btn-secondary flex-1 text-sm">Back</button>
+              <button onClick={handlePencil} disabled={saving || !localCase}
                 className="flex-1 text-sm px-4 py-2 rounded font-medium bg-amber-700 text-white hover:bg-amber-800 transition-colors disabled:opacity-50">
                 {saving ? 'Saving…' : 'Pencil slot'}
               </button>
@@ -341,12 +362,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
               <textarea value={message} onChange={e => setMessage(e.target.value)}
                 placeholder="Optional message…" rows={2} className="input text-xs resize-none" />
             )}
+            {conflict && <ConflictError />}
             <div className="flex gap-2">
-              <button onClick={() => setStep('view')} className="btn-secondary flex-1 text-sm">Back</button>
-              <button onClick={() => {
-                // Conflict already resolved via confirm_overwrite step — go straight to book
-                handleProvisional()
-              }} disabled={saving || !localCase}
+              <button onClick={() => { setStep('view'); setConflict(false) }} className="btn-secondary flex-1 text-sm">Back</button>
+              <button onClick={handleProvisional} disabled={saving || !localCase}
                 className="flex-1 text-sm px-4 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50">
                 {saving ? 'Saving…' : 'Book'}
               </button>
