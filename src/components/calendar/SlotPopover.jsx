@@ -251,6 +251,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                     className="flex items-center gap-1.5 flex-1 text-sm px-3 py-2 rounded font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors">
                     <Pencil size={13} />Convert to Pencil
                   </button>
+                  <button onClick={() => setConfirmDel(true)}
+                    className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </>
             )}
@@ -291,7 +295,13 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
             )}
 
             {isConfirmed && (
-              <button onClick={onClose} className="btn-secondary w-full text-sm">Close</button>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
+                <button onClick={() => setConfirmDel(true)}
+                  className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
+                  <Trash2 size={14} />
+                </button>
+              </div>
             )}
           </div>
         )}
