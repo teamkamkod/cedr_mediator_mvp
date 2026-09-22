@@ -14,7 +14,7 @@ const statusStyles = {
 }
 
 export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false, onInfoClick = null, groupPulse = false }) {
-  const { status = 'not_set', source, cases } = slotData || {}
+  const { status = 'not_set', source, record_name } = slotData || {}
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
 
   const selectedStyle = 'bg-cedr-navy/10 border-cedr-navy ring-2 ring-cedr-navy/30 text-cedr-navy'
@@ -61,10 +61,12 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
           </div>
         </div>
         {status !== 'not_set' && !selected && (
-          <span className="text-sm font-semibold leading-tight">
-            {['provisionally_booked', 'confirmed'].includes(status) && cases?.case_name
-              ? cases.case_name : meta.label}
-          </span>
+          <>
+            <span className="text-sm font-semibold leading-tight">{meta.label}</span>
+            {record_name && ['pencilled', 'provisionally_booked', 'confirmed'].includes(status) && (
+              <span className="text-[10px] text-current opacity-70 truncate leading-tight">{record_name}</span>
+            )}
+          </>
         )}
         {status === 'not_set' && !selected && !highlighted && (
           <span className="text-xs opacity-0 group-hover:opacity-40 transition-opacity">

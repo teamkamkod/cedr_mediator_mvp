@@ -288,6 +288,11 @@ export function useBatchCreateProvisionalBooking() {
         })
       )
 
+      // Clear all pencilled slots for this case (only 1 provisional per case allowed)
+      if (caseData?.case_id) {
+        await deleteOtherCasePencils(caseData.case_id, null)
+      }
+
       const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
       await fetch(MAKE_WEBHOOK, {
         method:  'POST',
@@ -380,6 +385,11 @@ export function useCreateProvisionalBooking() {
             record_name:         caseData?.record_name || null,
           }, { onConflict: 'mediator_id,slot_start' })
         if (error) throw error
+      }
+
+      // Clear all pencilled slots for this case (only 1 provisional per case allowed)
+      if (caseData?.case_id) {
+        await deleteOtherCasePencils(caseData.case_id, null)
       }
 
       await fetch(MAKE_WEBHOOK, {

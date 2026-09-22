@@ -7,7 +7,7 @@ import {
   useUpsertSlot, useCreateSeries,
   useDeleteSlot, useDeleteSeriesException, useDeactivateSeriesFrom,
   usePencilSlot, useCreateProvisionalBooking, useDeleteSlotGroup,
-  useUpdateSlotGroup, deleteOtherCasePencils,
+  useUpdateSlotGroup, deleteOtherCasePencils, checkCaseConflict,
 } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 import { useCase } from '../../lib/CaseContext'

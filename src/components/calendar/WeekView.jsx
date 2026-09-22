@@ -44,7 +44,12 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoC
         )}>
         <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">Full day</span>
         {status !== 'not_set' && !selected && (
-          <span className="text-sm font-semibold leading-tight">{meta.label}</span>
+          <>
+            <span className="text-sm font-semibold leading-tight">{meta.label}</span>
+            {slotData?.record_name && ['pencilled', 'provisionally_booked', 'confirmed'].includes(status) && (
+              <span className="text-[10px] text-current opacity-70 truncate leading-tight">{slotData.record_name}</span>
+            )}
+          </>
         )}
       </button>
       {onInfoClick && slotData?.hubspot_record_id && (
