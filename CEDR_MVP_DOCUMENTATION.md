@@ -405,7 +405,66 @@ All payloads include: `mediator_id`, `hubspot_mediator_object_id`, slot details,
 
 ---
 
-### 4.5 Security
+### 4.5 HubSpot CRM Extensions
+
+Two custom CRM card projects extend the portal directly inside HubSpot, allowing CRAs to access availability and booking features without leaving their CRM. Both are built as **HubSpot UI Extensions** (Platform 2026.03) using React and HubSpot's `@hubspot/ui-extensions` SDK.
+
+---
+
+#### Mediator Card (`cedr-mediator-card`)
+
+**Installed on:** The custom **Mediator** object (object type `2-48634649`)
+
+This card appears on each mediator's record in HubSpot and gives CRAs an at-a-glance view of that mediator's upcoming availability without opening the portal separately.
+
+**Features:**
+- Displays a compact weekly availability grid inline on the HubSpot mediator record
+- Shows the current week's AM/PM slot statuses (Available, Unavailable, Pencilled, etc.)
+- Includes a button to open the **full calendar** for that mediator in an iframe modal, pre-loaded with the correct mediator context
+- Passes the mediator's `hubspot_mediator_object_id` to the portal to ensure the correct calendar is displayed
+
+**Deployment:** Installed via HubSpot's private app / UI extensions deployment process on the CEDR HubSpot portal.
+
+---
+
+#### Case Card (`cedr-case-card`)
+
+**Installed on:** **Deals** and **Tickets** in HubSpot
+
+This card appears on each deal or ticket record and gives CRAs a direct path to searching for available mediators and creating a booking, with the case context automatically pre-filled.
+
+**Features:**
+- Displays case identification information inline on the HubSpot record:
+  - **Deals:** `enquiry_id_string` (case reference) + `dealname`
+  - **Tickets:** `subject` + `enquiry_number_auto_generated`
+- Includes a button that opens the **Search available mediators** page (`/availability`) in an iframe modal
+- Automatically passes the case context as URL parameters: `case_id`, `record_id`, `object_type`, `record_name`
+- The portal detects these parameters on load and pre-fills the case in all booking forms — the CRA does not need to search for the case manually
+
+**Case context URL format:**
+```
+/availability?case_id={enquiry_id}&record_id={hubspot_record_id}&object_type=deal&record_name={dealname}
+```
+
+**Components:**
+- `CaseDealCard.jsx` — card for Deal records
+- `CaseTicketCard.jsx` — card for Ticket records
+- `getCaseInfo.js` — serverless function that fetches the required case properties from HubSpot to populate the card display
+
+**Deployment:** Two separate card registrations in HubSpot (one for Deals, one for Tickets), deployed via UI extensions. Requires a HubSpot Private App with CRM read scopes.
+
+---
+
+#### Production deployment note
+
+Both CRM card projects are separate codebases from the main portal. For production deployment on CEDR's HubSpot portal:
+- Both cards must be re-deployed targeting CEDR's production portal ID
+- The `getCaseInfo.js` serverless function must be updated with CEDR's production HubSpot Private App token
+- The iframe URLs in both cards must point to the CEDR production portal URL (e.g. `https://availability.cedr.com`)
+
+---
+
+### 4.6 Security
 
 | Measure | Implementation |
 |---------|----------------|
@@ -430,6 +489,7 @@ All payloads include: `mediator_id`, `hubspot_mediator_object_id`, slot details,
 | Backend logic | Supabase Edge Functions (Deno) | KamKod Supabase project |
 | Automation | Make.com | KamKod Make.com account |
 | CRM | HubSpot | KamKod test portal (5956807) |
+| **HubSpot CRM cards** | HubSpot UI Extensions (React) | KamKod test portal — Mediator card + Case card (Deal + Ticket) |
 | Source code | GitHub | `github.com/teamkamkod/cedr_mediator_mvp` |
 | State management | TanStack Query | (frontend library, no external dependency) |
 | Routing | React Router v6 | (frontend library) |
@@ -446,6 +506,7 @@ For production deployment, **every infrastructure component must be transferred 
 | **Backend logic** | Supabase Edge Functions (Deno) | **CEDR Supabase project** |
 | **Automation** | Make.com | **CEDR Make.com account** (already in use for other flows) |
 | **CRM** | HubSpot | **CEDR production HubSpot portal** |
+| **HubSpot CRM cards** | HubSpot UI Extensions (React) | Re-deployed on **CEDR production HubSpot portal** (Mediator card + Case card) |
 | **Source code** | GitHub | **CEDR GitHub organisation** (or equivalent) |
 | **HubSpot Private App** | HubSpot API | New Private App created under CEDR's HubSpot portal with required scopes |
 
@@ -461,6 +522,9 @@ Before going live with real data:
 - [ ] Configure Cloudflare Pages on CEDR's Cloudflare account, connected to the CEDR repo
 - [ ] Point `availability.cedr.com` (or chosen domain) to the Cloudflare Pages deployment
 - [ ] Create a new HubSpot Private App in CEDR's production portal with the required API scopes
+- [ ] Re-deploy `cedr-mediator-card` (Mediator object card) targeting CEDR's production portal
+- [ ] Re-deploy `cedr-case-card` (Deal + Ticket cards) targeting CEDR's production portal
+- [ ] Update `getCaseInfo.js` serverless function with CEDR production HubSpot token and portal URL
 - [ ] Update Make.com scenarios on CEDR's account with the new Supabase webhook URL
 - [ ] Create user accounts for all CEDR super admins and CRAs
 - [ ] Invite mediators and assign clerks
