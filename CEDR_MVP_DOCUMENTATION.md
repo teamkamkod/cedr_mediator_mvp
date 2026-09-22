@@ -1,9 +1,14 @@
-# CEDR Mediator Availability Portal — MVP Documentation
+# CEDR Mediator Availability Portal — Documentation
 
-**Version:** MVP 1.0  
+**Version:** MVP 1.0 — Preliminary  
 **Date:** September 2026  
 **Prepared by:** KamKod  
-**Status:** MVP — Test environment
+**Status:** Pre-production — pending migration to CEDR-owned infrastructure
+
+---
+
+> **Important — Preliminary document**
+> This documentation describes the application as deployed on KamKod's test infrastructure for MVP validation purposes. It is intended to inform CEDR's technical and legal teams ahead of production deployment. **No real personal data should be processed until the application has been migrated to CEDR-owned infrastructure** and the necessary Data Processing Agreements are in place.
 
 ---
 
@@ -13,7 +18,7 @@
 2. [Roles & Permissions](#2-roles--permissions)
 3. [User Journeys](#3-user-journeys)
 4. [Technical Documentation](#4-technical-documentation)
-5. [Technical Stack](#5-technical-stack)
+5. [Technical Stack & Production Architecture](#5-technical-stack--production-architecture)
 6. [GDPR Compliance](#6-gdpr-compliance)
 
 ---
@@ -29,25 +34,29 @@ The application provides a centralised interface for:
 - CRAs to search available mediators and propose or confirm mediation dates linked to active HubSpot cases
 - Automating the booking workflow from initial pencil through to confirmed booking, with HubSpot deal stage synchronisation
 
-### MVP Scope
+### Current MVP Status
 
-This is a **Minimum Viable Product** intended for internal demonstration and early validation with CEDR's commercial team. It is deployed on **KamKod's test infrastructure**:
+This is a **Minimum Viable Product** built for internal demonstration and early validation with CEDR's commercial team. The application is currently deployed on **KamKod's test infrastructure** for evaluation purposes only.
 
-| Component | Environment |
-|-----------|-------------|
-| Frontend | Cloudflare Pages — `cedr-mediator-mvp.team-cd8.workers.dev` |
-| Backend | Supabase project `kvmvgezohrrrutkxhzit` (eu-west-2) |
-| Source code | GitHub — `github.com/teamkamkod/cedr_mediator_mvp` |
-| HubSpot portal | Portal `5956807` (KamKod test portal) |
-| Automation | Make.com (KamKod account) |
+**Before any production use or processing of real personal data, the following migration steps are required:**
 
-> **Note:** Before production deployment, all environments will be migrated to CEDR's own accounts and infrastructure.
+| Component | Current (MVP / KamKod) | Target (Production / CEDR) |
+|-----------|------------------------|---------------------------|
+| Frontend hosting | KamKod Cloudflare Pages account | CEDR Cloudflare Pages account (or equivalent) |
+| Database & Auth | KamKod Supabase project (eu-west-2) | CEDR Supabase project (or equivalent managed PostgreSQL) |
+| Edge Functions | KamKod Supabase project | CEDR Supabase project |
+| Source code | `github.com/teamkamkod/cedr_mediator_mvp` | CEDR GitHub organisation (or equivalent) |
+| HubSpot portal | KamKod test portal (5956807) | CEDR production HubSpot portal |
+| Automation (Make.com) | KamKod Make.com account | CEDR Make.com account (already in use) |
+| Domain | `cedr-mediator-mvp.team-cd8.workers.dev` | CEDR-owned custom domain (e.g. `availability.cedr.com`) |
+
+This document is intended to serve as the technical and compliance reference for that migration process and for CEDR's internal review.
 
 ---
 
 ## 2. Roles & Permissions
 
-The application uses four roles, stored on the `users` table and enforced via Supabase Row Level Security (RLS) policies.
+The application uses four roles, stored in the `users` table and enforced via Supabase Row Level Security (RLS) policies.
 
 ### Role overview
 
@@ -106,9 +115,9 @@ The application uses four roles, stored on the `users` table and enforced via Su
 **Responding to booking requests**
 1. A purple notification banner appears at the top of the calendar when a CRA has pencilled one or more dates
 2. Click the bell icon to expand the banner — requests are grouped by case
-3. Review the case summary and slot details in the **Accept confirmation modal** (HubSpot case info + proposed dates)
-4. Click **Accept** to confirm → slot moves to Provisionally Booked; all other pencilled dates for the same case are automatically cleared
-5. Click **Decline** to reject → slot is deleted; other pending dates remain
+3. Click **Accept** → the **Accept confirmation modal** opens, showing full HubSpot case details and the proposed slot(s)
+4. Review and click **Confirm acceptance** → slot moves to Provisionally Booked; all other pencilled dates for the same case are automatically cleared
+5. Click **Decline** to reject the proposal → slot is deleted; other pending dates remain
 
 **Clerk (identical journey, scoped to assigned mediator)**
 - Clerk sees the calendar of their assigned mediator
@@ -125,39 +134,36 @@ The application uses four roles, stored on the `users` table and enforced via Su
 
 **Managing a mediator's availability**
 1. Click any slot to open the CRA popover
-2. Can set status, create a pencilled slot (with case link), or create a provisional booking
+2. Can set status, create a pencilled slot (with case link), or create a provisional booking directly
 3. Can delete any slot regardless of status
 4. For recurring series slots: prompted to delete "this occurrence only" or "this and all future occurrences"
 5. For grouped booking slots: prompted to delete the entire mediation date group
 
 **Pencilling a slot**
 1. In the slot popover, choose **Pencil**
-2. Search for the linked case using the case search (queries HubSpot deals in the mediation pipeline)
+2. Search for the linked case (queries HubSpot deals in the mediation pipeline by case reference)
 3. Optionally select Full day (AM + PM)
-4. Submit → slot(s) created as Pencilled; mediator receives a notification
+4. Submit → slot(s) created as Pencilled; mediator receives a notification in the banner
 5. If the case already has a Provisionally Booked or Confirmed slot, the action is blocked with an error
 
 **Creating a provisional booking directly**
 1. In the slot popover, choose **Provisional Booking**
-2. Select the linked case
-3. Optionally notify the mediator by email
-4. Submit → slot(s) created as Provisionally Booked; all pencilled slots for the same case are cleared
+2. Select the linked case; optionally notify the mediator by email
+3. Submit → slot(s) created as Provisionally Booked; all pencilled slots for the same case are cleared
 
 **Using the availability search**
 1. Navigate to **Search available mediators** (sidebar link)
-2. A weekly grid shows aggregated availability across all mediators (green = available, red = unavailable)
-3. Click any available slot to see which mediators are available for that date/period
-4. Select one or more slots using checkboxes
-5. Open the mediator drawer to view their full calendar for those slots
-6. Click **Book x slots** to open the booking popover
-7. Choose **Pencil** or **Provisional Booking**, select the case, confirm
+2. A weekly grid shows aggregated availability across all mediators
+3. Click any available slot to see which mediators are free for that date/period
+4. Select one or more slots, open the mediator drawer, and click **Book x slots**
+5. Choose **Pencil** or **Provisional Booking**, select the case, confirm
 
 **Select mode (batch operations)**
 1. Click **Select** in the calendar header to enter select mode
-2. Click individual slots to add them to the selection
-3. The floating action bar at the bottom shows:
+2. Click individual slots to build a selection
+3. Floating action bar:
    - **Delete N** — deletes all selected slots (with confirmation)
-   - **Book N slots** (CRA only) — opens the batch booking popover (enabled only when all selected slots are Available or not set)
+   - **Book N slots** (CRA only) — opens batch booking popover (enabled only when all selected slots are Available or not set)
 
 ---
 
@@ -172,7 +178,7 @@ The application uses four roles, stored on the `users` table and enforced via Su
 **Settings — Case Type Labels**
 1. Navigate to **Settings** via the sidebar
 2. The table shows all HubSpot `case_type` enum values (sourced live from the HubSpot Properties API)
-3. Edit the **App Display** column to customise what mediators and clerks see instead of the raw HubSpot value
+3. Edit the **App Display** column to customise what mediators and clerks see
 4. Save inline — changes take effect immediately
 
 ---
@@ -181,13 +187,13 @@ The application uses four roles, stored on the `users` table and enforced via Su
 
 ### 4.1 Database Tables
 
-All tables live in the `public` schema of the Supabase PostgreSQL instance. Row Level Security (RLS) is enabled on all tables.
+All tables live in the `public` schema of the PostgreSQL instance. Row Level Security (RLS) is enabled on all tables.
 
 ---
 
 #### `users`
 
-Mirrors Supabase Auth users with application-level metadata.
+Mirrors the authentication provider's user records with application-level metadata.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -214,14 +220,14 @@ Core table. Each row represents a single AM or PM slot for a mediator on a given
 | `id` | uuid PK | Row identifier |
 | `mediator_id` | uuid FK → users | Owner mediator |
 | `date` | date | Calendar date (stored explicitly) |
-| `slot_start` | timestamptz | Slot start time in UTC (AM = 07:00 UTC / BST 08:00, PM = 13:00 UTC / BST 14:00) |
-| `slot_end` | timestamptz | Slot end time in UTC (AM = 11:00 UTC / BST 12:00, PM = 17:00 UTC / BST 18:00) |
-| `period` | text GENERATED | Computed from `slot_start`: `morning` if hour < 13 (Europe/London), else `afternoon` |
+| `slot_start` | timestamptz | Slot start in UTC (AM: 07:00 UTC in BST / 08:00 UTC in GMT) |
+| `slot_end` | timestamptz | Slot end in UTC (AM: 11:00 UTC in BST / 12:00 UTC in GMT) |
+| `period` | text GENERATED | Derived from `slot_start`: `morning` if London hour < 13, else `afternoon` |
 | `status` | text | See slot lifecycle below |
-| `notes` | text | Optional free-text notes |
+| `notes` | text | Optional notes |
 | `series_id` | uuid FK → recurring_series | Set when slot is an exception to a recurring series |
 | `is_exception` | boolean | True if this row overrides a series occurrence |
-| `group_id` | uuid | Groups slots forming a single mediation date proposal (shared across AM+PM or multi-day) |
+| `group_id` | uuid | Groups slots forming a single mediation date proposal |
 | `case_id` | text | HubSpot enquiry reference (`enquiry_id_string`) |
 | `hubspot_record_id` | text | HubSpot deal/ticket object ID |
 | `hubspot_object_type` | text | `deal` or `ticket` |
@@ -229,22 +235,22 @@ Core table. Each row represents a single AM or PM slot for a mediator on a given
 | `created_by` / `updated_by` | uuid FK → users | Audit trail |
 | `created_at` / `updated_at` | timestamptz | Timestamps |
 
-**Unique constraint:** `(mediator_id, slot_start)` — prevents duplicate slots for the same mediator at the same time.
+**Unique constraint:** `(mediator_id, slot_start)` — prevents duplicate slots.
 
 **Slot lifecycle:**
 
 ```
-not_set → available / unavailable / ask_me  (set by mediator/clerk/CRA)
-        → pencilled                          (created by CRA, linked to a case)
-            → provisionally_booked           (accepted by mediator/clerk)
-                → confirmed                  (HubSpot deal reaches stage 1113239382)
+not_set → available / unavailable / ask_me   (set by mediator / clerk / CRA)
+        → pencilled                           (created by CRA, linked to a case)
+             → provisionally_booked           (accepted by mediator / clerk)
+                  → confirmed                 (HubSpot deal reaches confirmed stage)
 ```
 
-**Business rules enforced in application:**
+**Business rules:**
 - A case may have N `pencilled` mediation date proposals
-- A case may have at most **1** `provisionally_booked` or `confirmed` slot
+- A case may have at most **1** `provisionally_booked` or `confirmed` slot at any time
 - When a pencilled slot is accepted → all other pencilled slots for the same case are deleted
-- When a provisional booking is created → all pencilled slots for the same case are deleted
+- When a provisional booking is created directly → all pencilled slots for the same case are deleted
 
 ---
 
@@ -261,11 +267,11 @@ Defines repeating availability patterns. Slots are generated on the fly by the `
 | `series_slot_end` | time | End time (e.g. `12:00:00` for AM) |
 | `period` | text GENERATED | Derived from `series_slot_start` |
 | `frequency` | text | `weekly`, `biweekly`, or `monthly` |
-| `status` | text | Availability status for this series |
+| `status` | text | Availability status for occurrences of this series |
 | `start_date` | date | Series starts on or after this date |
 | `end_date` | date | Series ends on or before this date (null = no end) |
 | `notes` | text | Optional notes |
-| `is_active` | boolean | Set to false to deactivate the series |
+| `is_active` | boolean | False if series is fully deactivated |
 
 ---
 
@@ -284,33 +290,33 @@ Many-to-many relationship between mediators and their clerks.
 
 #### `case_type_labels`
 
-Maps HubSpot `case_type` enum values to display labels shown in the app.
+Maps HubSpot `case_type` enum values to display labels shown to mediators and clerks.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `api_value` | text PK | HubSpot internal enum value |
-| `display_label` | text | Label shown to mediators and clerks |
+| `display_label` | text | Label shown to mediators and clerks in the app |
 | `created_at` / `updated_at` | timestamptz | |
 
 ---
 
 ### 4.2 Row Level Security (RLS)
 
-All tables have RLS enabled. Helper functions in the `public` schema:
+All tables have RLS enabled. Two helper functions in the `public` schema:
 
 ```sql
-is_super_admin()  -- returns true if auth.uid() maps to a user with role = 'super_admin'
-is_cra()          -- returns true if auth.uid() maps to a user with role = 'cra'
+is_super_admin()  -- true if the authenticated user has role = 'super_admin'
+is_cra()          -- true if the authenticated user has role = 'cra'
 ```
 
 #### `availability_slots` policies
 
 | Operation | Who can perform it |
 |-----------|--------------------|
-| SELECT | Mediator (own slots), assigned clerks, CRA (all), super_admin (all) |
+| SELECT | Mediator (own), assigned clerks, CRA (all), super_admin (all) |
 | INSERT | Mediator, clerks, CRA, super_admin |
 | UPDATE | Mediator (own), assigned clerks, CRA (all), super_admin (all) |
-| DELETE | Mediator (own), assigned clerks, CRA (own inserts only), super_admin (all) |
+| DELETE | Mediator (own), assigned clerks, CRA (own inserts), super_admin (all) |
 
 #### `recurring_series` policies
 
@@ -325,7 +331,7 @@ is_cra()          -- returns true if auth.uid() maps to a user with role = 'cra'
 
 | Operation | Who can perform it |
 |-----------|--------------------|
-| SELECT | Own record; mediator sees own clerks; clerk sees assigned mediator; CRA sees all; super_admin sees all |
+| SELECT | Own record; mediator sees own clerks; clerk sees assigned mediator; CRA (all); super_admin (all) |
 | INSERT | super_admin only |
 | UPDATE | Own record; super_admin (all) |
 
@@ -338,59 +344,59 @@ is_cra()          -- returns true if auth.uid() maps to a user with role = 'cra'
 
 ---
 
-### 4.3 Edge Functions (Supabase)
+### 4.3 Edge Functions
 
-All functions are deployed to the `kvmvgezohrrrutkxhzit` Supabase project. JWT verification is enabled on all except `hubspot-sync-webhook`.
+Serverless functions deployed alongside the database. JWT verification is enabled on all except `hubspot-sync-webhook`.
 
 | Function | Auth | Description |
 |----------|------|-------------|
 | `invite-clerk` | JWT | Sends an invitation email for a new clerk user |
 | `admin-invite-user` | JWT | Creates a user of any role (used by super_admin) |
-| `search-hubspot-cases` | JWT | Searches HubSpot deals in the mediation pipeline (`764352937`) by `enquiry_id_string`; client-side substring filtering; returns `case_id`, `record_name`, `record_id` |
-| `get-deal-info` | JWT | Fetches deal properties + owner from HubSpot for the case details modal; includes retry on 429 |
-| `get-deal-property-options` | JWT | Fetches enum options for a HubSpot deal property (used by Settings page for `case_type`) |
-| `hubspot-sync-webhook` | None (server-to-server) | Receives `{ event, hubspot_record_id }` from Make.com; handles `case_confirmed` event by updating `provisionally_booked` → `confirmed` |
+| `search-hubspot-cases` | JWT | Searches HubSpot deals in the mediation pipeline by case reference; returns matched cases to the frontend |
+| `get-deal-info` | JWT | Fetches deal properties and owner details from HubSpot for the case details modal; includes retry on rate limit |
+| `get-deal-property-options` | JWT | Fetches enum options for a HubSpot deal property (used by Settings page to load `case_type` values) |
+| `hubspot-sync-webhook` | None (server-to-server) | Receives `{ event, hubspot_record_id }` from Make.com; handles `case_confirmed` by updating `provisionally_booked → confirmed` |
 
 ---
 
-### 4.4 Key Frontend Features
+### 4.4 Key Application Features
 
 #### Slot resolution
 
-Slots are resolved at display time by the `resolveSlot(date, period, slots, series)` function:
+Slots are resolved at display time by the `resolveSlot` function:
 1. Check `availability_slots` for an explicit record matching `(date, period, mediator_id)`
-2. If none, check `recurring_series` for a matching series (day_of_week, frequency, active date range)
+2. If none found, check `recurring_series` for a matching series (day of week, frequency, active date range)
 3. Return `not_set` if neither matches
 
-This approach keeps the database lean — only overrides and exceptions are stored, not every possible slot.
+This keeps the database lean — only explicit overrides and exceptions are stored, not every possible time slot for every mediator.
 
 #### Timezone handling
 
-All slot times are stored as `TIMESTAMPTZ` in UTC. The `slotTime.js` helper dynamically detects BST/GMT using `Intl.DateTimeFormat` and constructs ISO 8601 timestamps with the correct offset at write time.
+All slot times are stored as `TIMESTAMPTZ` in UTC. The `slotTime.js` helper dynamically detects BST/GMT via `Intl.DateTimeFormat` and constructs timestamps with the correct offset.
 
-- AM: `08:00–12:00 Europe/London` → UTC `07:00–11:00` (BST) or `08:00–12:00` (GMT)
-- PM: `14:00–18:00 Europe/London` → UTC `13:00–17:00` (BST) or `14:00–18:00` (GMT)
+- **AM:** 08:00–12:00 Europe/London (07:00–11:00 UTC in BST, 08:00–12:00 UTC in GMT)
+- **PM:** 14:00–18:00 Europe/London (13:00–17:00 UTC in BST, 14:00–18:00 UTC in GMT)
 
-The `period` column is GENERATED from `slot_start`, making it always consistent.
+The `period` column is GENERATED from `slot_start`, ensuring it is always consistent with the stored time.
 
-#### HubSpot booking flow
+#### Booking flow
 
 ```
 CRA creates Pencilled slot (linked to HubSpot case)
-    ↓  Mediator receives notification in ProvisionalBanner
-    ↓  Mediator accepts
+    ↓  Mediator / clerk notified via banner
+    ↓  Reviews case details and accepts via confirmation modal
 Provisionally Booked
-    ↓  HubSpot deal stage changes to "Confirmed" (1113239382)
-    ↓  Make.com webhook fires → POST /hubspot-sync-webhook
-    ↓  { "event": "case_confirmed", "hubspot_record_id": "xxx" }
+    ↓  HubSpot deal stage changes to Confirmed (stage ID 1113239382)
+    ↓  Make.com automation fires
+    ↓  POST /hubspot-sync-webhook  { "event": "case_confirmed", "hubspot_record_id": "..." }
 Confirmed
 ```
 
-#### Make.com webhook events (outbound)
+#### Make.com outbound webhook events
 
 | Event | Trigger |
 |-------|---------|
-| `request_availability_update` | CRA clicks "Request Update" on a mediator calendar |
+| `request_availability_update` | CRA requests availability update from mediator |
 | `slot_pencilled` | CRA creates a pencilled slot |
 | `provisional_booking_confirmed` | Mediator/clerk accepts a pencil → becomes provisionally booked |
 | `provisional_booking_declined` | Mediator/clerk declines a pencil |
@@ -401,59 +407,83 @@ All payloads include: `mediator_id`, `hubspot_mediator_object_id`, slot details,
 
 ### 4.5 Security
 
-#### Authentication
-- Managed by **Supabase Auth** (email/password). Sessions are JWT-based.
-- All API calls from the frontend include the user's JWT in the `Authorization` header.
-- Edge Functions validate the JWT against Supabase Auth before executing.
-
-#### Authorisation
-- Role stored in `public.users.role`; read by helper functions `is_super_admin()` and `is_cra()` used in RLS policies.
-- RLS is enforced at the database level — even if the frontend sends an incorrect request, the database will reject it.
-- The `hubspot-sync-webhook` endpoint does not require JWT (it is called by Make.com, not by browser clients). It uses Supabase's service role key server-side and only processes a predefined set of events.
-
-#### HubSpot API access
-- The HubSpot Private App token is stored as a Supabase secret (`HUBSPOT_API_TOKEN`) and is never exposed to the browser.
-- All HubSpot API calls are proxied through Supabase Edge Functions.
-
-#### Data exposure by role
-- Mediators and clerks never receive the HubSpot deal name (`record_name`) in the UI — only the case reference number (`case_id`).
-- The `get-deal-info` function is accessible to all authenticated users, but the UI applies role-based filtering to what is displayed (e.g. raw vs mapped case type label).
+| Measure | Implementation |
+|---------|----------------|
+| Authentication | Supabase Auth — email/password, JWT sessions (access + refresh tokens) |
+| Authorisation | Role stored in `users.role`; enforced by RLS at database level |
+| API secrets | HubSpot Private App token stored as an encrypted server-side secret; never exposed to the browser |
+| RLS enforcement | All queries go through RLS regardless of client; even a compromised frontend cannot bypass it |
+| Audit trail | `created_by`, `updated_by`, `created_at`, `updated_at` on all slot records |
+| Webhook security | `hubspot-sync-webhook` uses Supabase's service role key server-side; not exposed to browser clients |
 
 ---
 
-## 5. Technical Stack
+## 5. Technical Stack & Production Architecture
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | React 18 + Vite + Tailwind CSS | Single-page PWA |
-| **Hosting** | Cloudflare Pages | CDN-hosted static build, global edge delivery |
-| **Database** | Supabase PostgreSQL (eu-west-2) | Slot data, user profiles, recurring series |
-| **Auth** | Supabase Auth | Email/password authentication, JWT sessions |
-| **Backend logic** | Supabase Edge Functions (Deno) | HubSpot API proxy, user invitation, webhook receiver |
-| **Automation** | Make.com | Middleware between HubSpot deal stage changes and the Supabase webhook; outbound notifications |
-| **CRM** | HubSpot (portal 5956807) | Source of truth for cases (deals), mediator objects, pipeline stages |
-| **Source control** | GitHub (`teamkamkod/cedr_mediator_mvp`) | Version control and CI/CD trigger for Cloudflare Pages |
-| **State management** | TanStack Query (React Query) | Server state, caching, background polling |
-| **Routing** | React Router v6 | Client-side navigation |
-| **Date handling** | date-fns | Date arithmetic, formatting |
-| **UI icons** | Lucide React | Icon set |
+### 5.1 Current MVP stack (KamKod test)
 
-### Infrastructure diagram
+| Layer | Technology | MVP environment |
+|-------|-----------|-----------------|
+| Frontend | React 18 + Vite + Tailwind CSS | KamKod Cloudflare Pages account |
+| Database | PostgreSQL via Supabase | KamKod Supabase project (eu-west-2) |
+| Auth | Supabase Auth | KamKod Supabase project |
+| Backend logic | Supabase Edge Functions (Deno) | KamKod Supabase project |
+| Automation | Make.com | KamKod Make.com account |
+| CRM | HubSpot | KamKod test portal (5956807) |
+| Source code | GitHub | `github.com/teamkamkod/cedr_mediator_mvp` |
+| State management | TanStack Query | (frontend library, no external dependency) |
+| Routing | React Router v6 | (frontend library) |
+
+### 5.2 Target production architecture (CEDR-owned)
+
+For production deployment, **every infrastructure component must be transferred to accounts owned by CEDR**. No data should be processed in production through KamKod-owned services.
+
+| Layer | Technology | Target CEDR environment |
+|-------|-----------|-------------------------|
+| **Frontend** | React 18 + Vite + Tailwind CSS | **CEDR Cloudflare Pages account** + custom domain (e.g. `availability.cedr.com`) |
+| **Database** | PostgreSQL | **CEDR Supabase project** — recommended region: `eu-west-2` (London) to maintain UK data residency |
+| **Auth** | Supabase Auth | **CEDR Supabase project** |
+| **Backend logic** | Supabase Edge Functions (Deno) | **CEDR Supabase project** |
+| **Automation** | Make.com | **CEDR Make.com account** (already in use for other flows) |
+| **CRM** | HubSpot | **CEDR production HubSpot portal** |
+| **Source code** | GitHub | **CEDR GitHub organisation** (or equivalent) |
+| **HubSpot Private App** | HubSpot API | New Private App created under CEDR's HubSpot portal with required scopes |
+
+### 5.3 Migration checklist
+
+Before going live with real data:
+
+- [ ] Create Supabase project under CEDR's account (recommend eu-west-2)
+- [ ] Run all database migrations on the CEDR Supabase project
+- [ ] Deploy all Edge Functions to the CEDR Supabase project
+- [ ] Set required secrets on CEDR Supabase (`HUBSPOT_API_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`)
+- [ ] Fork / transfer source code repository to CEDR GitHub organisation
+- [ ] Configure Cloudflare Pages on CEDR's Cloudflare account, connected to the CEDR repo
+- [ ] Point `availability.cedr.com` (or chosen domain) to the Cloudflare Pages deployment
+- [ ] Create a new HubSpot Private App in CEDR's production portal with the required API scopes
+- [ ] Update Make.com scenarios on CEDR's account with the new Supabase webhook URL
+- [ ] Create user accounts for all CEDR super admins and CRAs
+- [ ] Invite mediators and assign clerks
+- [ ] Sign DPAs with Supabase and Cloudflare (see Section 6)
+- [ ] Conduct a brief security review of the RLS policies in the production environment
+- [ ] Remove KamKod test accounts and revoke MVP infrastructure access
+
+### 5.4 Infrastructure diagram (production target)
 
 ```
-Browser (React PWA)
+Browser (React PWA — CEDR domain)
     │
-    ├── Supabase JS Client (realtime + REST)
-    │       │
-    │       └── Supabase PostgreSQL (RLS enforced)
-    │               └── Supabase Edge Functions
-    │                       └── HubSpot API (Private App token)
+    ├── Supabase JS Client
+    │       └── CEDR Supabase project (eu-west-2)
+    │               ├── PostgreSQL database (RLS enforced)
+    │               └── Edge Functions
+    │                       └── CEDR HubSpot production portal (Private App)
     │
-    └── Cloudflare Pages (static hosting)
+    └── Cloudflare Pages (CEDR account)
 
-HubSpot (deal stage change)
-    └── Make.com (workflow)
-            └── POST /hubspot-sync-webhook (Supabase Edge Function)
+CEDR HubSpot (deal stage → Confirmed)
+    └── CEDR Make.com account (automation scenario)
+            └── POST /hubspot-sync-webhook (CEDR Supabase Edge Function)
                     └── UPDATE availability_slots SET status = 'confirmed'
 ```
 
@@ -461,17 +491,25 @@ HubSpot (deal stage change)
 
 ## 6. GDPR Compliance
 
-This section documents how the CEDR Mediator Availability Portal handles personal data in accordance with the **UK GDPR** and **EU GDPR** (Regulation 2016/679).
+This section documents how the CEDR Mediator Availability Portal handles personal data in accordance with **UK GDPR** and **EU GDPR** (Regulation 2016/679).
 
-> **Scope:** This section covers the custom-built components of the system: the React frontend, Supabase (auth + database + edge functions), and Cloudflare Pages. HubSpot and Make.com are excluded as they are existing CEDR tools already covered by separate GDPR assessments.
+> **Scope note:** This section covers the custom-built components of the system: the React frontend, the database and auth layer, edge functions, and the CDN hosting provider. HubSpot and Make.com are excluded as they are existing CEDR tools already covered by separate GDPR assessments and DPAs.
+
+> **Production prerequisite:** The GDPR analysis below assumes that all components are running on **CEDR-owned infrastructure**. The current MVP deployment on KamKod infrastructure must not be used to process real personal data.
 
 ---
 
-### 6.1 Data Controller
+### 6.1 Data Controller and Processor
 
-**CEDR** is the Data Controller for all personal data processed by this application. KamKod acts as a **Data Processor** during the development and MVP phase.
+**CEDR** is the **Data Controller** for all personal data processed by this application.
 
-A **Data Processing Agreement (DPA)** should be in place between CEDR and KamKod before any real personal data is processed. Upon production deployment, CEDR should also establish DPAs with Supabase and Cloudflare as sub-processors.
+During the development and MVP phase, **KamKod** acts as a **Data Processor** and a **Data Processing Agreement (DPA) must be in place** between CEDR and KamKod before any real personal data is processed.
+
+Upon production deployment on CEDR-owned infrastructure, KamKod's role as a processor is limited to any ongoing development or maintenance work under contract. CEDR will need to establish its own DPAs directly with:
+
+- **Supabase** (database, auth, edge functions)
+- **Cloudflare** (CDN / hosting)
+- **Amazon Web Services** (underlying infrastructure for Supabase)
 
 ---
 
@@ -479,15 +517,16 @@ A **Data Processing Agreement (DPA)** should be in place between CEDR and KamKod
 
 | Data | Table / Location | Purpose | Retention |
 |------|-----------------|---------|-----------|
-| Email address | `users.email` + Supabase Auth | Authentication, invitations | Duration of account |
+| Email address | `users.email` + Auth | Authentication, invitations | Duration of account |
 | First name, last name | `users.first_name`, `last_name`, `full_name` | Display in UI, attribution | Duration of account |
 | Profile picture URL | `users.avatar_url` | UI display | Duration of account |
-| HubSpot contact ID | `users.hubspot_contact_id` | CRM linkage | Duration of account |
-| Availability data | `availability_slots`, `recurring_series` | Scheduling | Per retention policy |
-| IP addresses / access logs | Supabase + Cloudflare infrastructure | Security, debugging | See below |
-| Case reference (enquiry_id) | `availability_slots.case_id` | Link slot to case | Duration of slot |
+| HubSpot contact/mediator ID | `users.hubspot_contact_id`, `users.hubspot_mediator_object_id` | CRM linkage | Duration of account |
+| Availability data | `availability_slots`, `recurring_series` | Scheduling | Per CEDR retention policy |
+| Case reference number | `availability_slots.case_id` | Link slot to HubSpot case | Duration of slot |
+| HubSpot deal name | `availability_slots.record_name` | Display for CRAs/admins | Duration of slot |
+| IP addresses / access logs | Infrastructure level (Supabase, Cloudflare) | Security, debugging | Per provider policy |
 
-**No special category data** (health, race, political views, etc.) is collected or processed by this application.
+**No special category data** is collected or processed by this application.
 
 ---
 
@@ -496,34 +535,35 @@ A **Data Processing Agreement (DPA)** should be in place between CEDR and KamKod
 | Processing activity | Legal basis |
 |--------------------|-------------|
 | User authentication and session management | **Legitimate interest** — necessary to operate the service |
-| Storing availability and booking data | **Legitimate interest** / **Contract performance** — core function of the service |
-| Sending invitation emails | **Legitimate interest** — user account creation |
-| Webhook notifications (Make.com → Supabase) | **Legitimate interest** — automated workflow execution |
+| Storing availability and booking data | **Legitimate interest** / **Contract performance** |
+| Sending invitation emails | **Legitimate interest** — account creation |
+| Webhook automation (Make.com → Supabase) | **Legitimate interest** — workflow execution |
 
 ---
 
-### 6.4 Data Storage — Supabase
+### 6.4 Data Storage — Supabase (CEDR-owned project)
 
-The application's primary data store is **Supabase**, hosted on **Amazon Web Services eu-west-2 (London)**.
+In production, **CEDR will own and control the Supabase project**. No data will transit through KamKod's Supabase project.
 
-- **Data residency:** All data is stored in the AWS eu-west-2 (London) region, within the UK.
-- **Encryption at rest:** Supabase encrypts all data at rest using AES-256.
-- **Encryption in transit:** All connections use TLS 1.2 or higher.
-- **Access control:** Database access is restricted to authenticated sessions with Row Level Security enforced at every query.
-- **Supabase GDPR documentation:** [https://supabase.com/privacy](https://supabase.com/privacy) | [https://supabase.com/docs/guides/platform/compliance](https://supabase.com/docs/guides/platform/compliance)
-- **Supabase DPA:** Available at [https://supabase.com/legal/dpa](https://supabase.com/legal/dpa)
+- **Recommended region:** `eu-west-2` (AWS London) — maintains UK data residency
+- **Encryption at rest:** Supabase encrypts all data using AES-256
+- **Encryption in transit:** TLS 1.2+ on all connections
+- **Access control:** RLS enforced at database level on every query; Supabase project credentials held by CEDR
+- **Supabase Privacy Policy:** [https://supabase.com/privacy](https://supabase.com/privacy)
+- **Supabase GDPR documentation:** [https://supabase.com/docs/guides/platform/compliance](https://supabase.com/docs/guides/platform/compliance)
+- **Supabase DPA:** [https://supabase.com/legal/dpa](https://supabase.com/legal/dpa)
 
-Supabase is SOC 2 Type 2 certified. The platform is GDPR-compliant and acts as a Data Processor with appropriate contractual safeguards.
+Supabase is SOC 2 Type 2 certified and GDPR-compliant.
 
 ---
 
-### 6.5 Data Storage — Cloudflare Pages
+### 6.5 Data Storage — Cloudflare Pages (CEDR-owned account)
 
-The frontend application is served via **Cloudflare Pages** (CDN).
+In production, **CEDR will own and control the Cloudflare Pages account and domain**.
 
-- Cloudflare Pages serves **static files only** — no personal data is stored on Cloudflare.
-- Cloudflare may process IP addresses and request metadata as part of its CDN and security services.
-- Cloudflare operates data centres globally; edge nodes may handle requests outside the UK/EU, but no application data is persisted at these locations.
+- Cloudflare Pages serves **static files only** — no personal data is stored on Cloudflare
+- Cloudflare may process IP addresses and request metadata as part of CDN and DDoS protection
+- No application data is persisted at Cloudflare edge nodes
 - **Cloudflare Privacy Policy:** [https://www.cloudflare.com/privacypolicy/](https://www.cloudflare.com/privacypolicy/)
 - **Cloudflare GDPR documentation:** [https://www.cloudflare.com/trust-hub/gdpr/](https://www.cloudflare.com/trust-hub/gdpr/)
 - **Cloudflare DPA:** [https://www.cloudflare.com/cloudflare-customer-dpa/](https://www.cloudflare.com/cloudflare-customer-dpa/)
@@ -532,90 +572,98 @@ The frontend application is served via **Cloudflare Pages** (CDN).
 
 ### 6.6 Authentication
 
-User authentication is handled by **Supabase Auth**:
-
-- Passwords are hashed using **bcrypt** and never stored in plaintext.
-- Sessions are managed via **JWT tokens** (short-lived access tokens + refresh tokens).
-- Tokens are stored in browser memory / secure storage — not in cookies.
-- Email invitations use time-limited, single-use links.
-- No third-party OAuth providers are used in this MVP (email/password only).
+- Passwords are hashed using **bcrypt** and never stored in plaintext
+- Sessions are managed via **JWT tokens** (short-lived access tokens + refresh tokens)
+- Tokens are stored in browser memory / secure storage — not in persistent cookies
+- Email invitations use time-limited, single-use links
+- No third-party OAuth providers are used (email/password only in MVP)
 
 ---
 
-### 6.7 Data Access & RLS
+### 6.7 HubSpot API Access
 
-Row Level Security ensures that:
-- Users can only access data they are authorised to see (their own availability, their assigned mediator's data, etc.)
-- Even direct database queries from the frontend cannot bypass these policies
-- CRAs and admins access all mediator data — this is an explicit business requirement, not a security oversight
+The application retrieves case information from CEDR's HubSpot portal:
 
----
-
-### 6.8 HubSpot API Access
-
-The application retrieves case information from HubSpot (deal properties, owner details) via Supabase Edge Functions:
-
-- The HubSpot Private App token is stored as an **encrypted environment secret** in Supabase
-- The token is **never exposed to the browser** — all HubSpot API calls are server-side
-- Only the minimum required deal properties are requested (enquiry reference, location, dates, case type, owner)
-- Retrieved data is returned to the browser for display only and is **not persisted** in Supabase
+- The HubSpot Private App token is stored as an **encrypted environment secret** in the CEDR Supabase project
+- The token is **never sent to or exposed in the browser** — all HubSpot API calls are server-side (Edge Functions)
+- Only the minimum required deal properties are requested
+- Retrieved data is displayed in the UI only and **not persisted** in the database
+- A **new Private App must be created in CEDR's production HubSpot portal** for production deployment (the MVP uses a KamKod test portal token)
 
 ---
 
-### 6.9 Data Retention
+### 6.8 Data Retention
 
-The application does not currently implement automated data retention/deletion. CEDR should define and implement a retention policy covering:
+The application does not implement automated data retention or deletion. CEDR should define a retention policy covering:
 
-- **User accounts:** deactivate (`is_active = false`) when a mediator or clerk is no longer engaged; full deletion upon request
-- **Availability slots:** consider archiving slots older than 12 months
-- **Confirmed bookings:** retention period to be aligned with CEDR's records management policy
+| Data | Recommended action |
+|------|--------------------|
+| User accounts | Deactivate (`is_active = false`) when a user is no longer engaged; delete upon formal request |
+| Past availability slots | Archive or delete slots older than 12–24 months (configurable) |
+| Confirmed bookings | Retain per CEDR's records management / legal hold policy |
 
----
-
-### 6.10 Data Subject Rights
-
-The application does not yet include a self-service interface for data subject rights requests. The following should be handled manually by a Super Admin or via the Supabase dashboard during the MVP phase:
-
-| Right | How to fulfil (MVP) |
-|-------|---------------------|
-| **Access** | Super Admin can view all user data via the Supabase dashboard |
-| **Rectification** | Super Admin can update user records in `users` table |
-| **Erasure** | Super Admin deletes the user from `auth.users` (cascades to `users` table) and removes associated slots |
-| **Portability** | Data can be exported from Supabase as CSV/JSON |
-| **Objection / Restriction** | Deactivate account (`is_active = false`), contact KamKod for full data removal |
-
-> **Recommendation:** Before production launch, implement a formal data subject request workflow.
+A future version of the application may include a self-service retention interface.
 
 ---
 
-### 6.11 Security Measures
+### 6.9 Data Subject Rights
+
+During the MVP phase, data subject rights requests should be handled by a Super Admin via the Supabase dashboard. Upon production deployment, CEDR should establish a formal process:
+
+| Right | How to fulfil |
+|-------|--------------|
+| **Access** | Super Admin exports user data from `users` and `availability_slots` tables |
+| **Rectification** | Super Admin updates records in the `users` table |
+| **Erasure** | Delete user from Auth (cascades to `users` table); remove associated slots |
+| **Portability** | Data exported from Supabase as CSV or JSON |
+| **Objection / Restriction** | Deactivate account; contact technical team for full data removal |
+
+> **Recommendation:** Before production launch, implement a formal data subject request workflow and appoint a named point of contact within CEDR.
+
+---
+
+### 6.10 Security Summary
 
 | Measure | Implementation |
-|---------|---------------|
-| Encryption in transit | TLS 1.2+ on all endpoints (Supabase, Cloudflare) |
-| Encryption at rest | AES-256 (Supabase / AWS) |
+|---------|----------------|
+| Encryption in transit | TLS 1.2+ (Supabase, Cloudflare) |
+| Encryption at rest | AES-256 (Supabase / AWS eu-west-2) |
 | Access control | JWT authentication + RLS on all tables |
-| API secret management | HubSpot token stored as encrypted Supabase secret |
-| No sensitive data in frontend | HubSpot API token and service role key never sent to browser |
+| API secret management | HubSpot token stored as encrypted Supabase secret (CEDR-owned) |
+| No browser-side secrets | HubSpot token and service role key never sent to the browser |
 | Audit trail | `created_by`, `updated_by`, `created_at`, `updated_at` on all slot records |
 | Minimal data collection | Only data required for scheduling is collected |
 
 ---
 
-### 6.12 Sub-processors Summary
+### 6.11 Sub-processors Summary (Production)
 
 | Sub-processor | Location | Purpose | GDPR documentation |
 |--------------|----------|---------|-------------------|
-| **Supabase** | AWS eu-west-2 (London, UK) | Database, Auth, Edge Functions | [supabase.com/legal/dpa](https://supabase.com/legal/dpa) |
-| **Cloudflare** | Global CDN (no data persistence) | Frontend hosting, CDN | [cloudflare.com/cloudflare-customer-dpa](https://www.cloudflare.com/cloudflare-customer-dpa/) |
+| **Supabase** (CEDR account) | AWS eu-west-2 (London, UK) | Database, Auth, Edge Functions | [supabase.com/legal/dpa](https://supabase.com/legal/dpa) |
+| **Cloudflare** (CEDR account) | Global CDN (no data persistence) | Frontend hosting | [cloudflare.com/cloudflare-customer-dpa](https://www.cloudflare.com/cloudflare-customer-dpa/) |
 | **Amazon Web Services** | eu-west-2 (London, UK) | Underlying infrastructure for Supabase | [aws.amazon.com/compliance/gdpr-center](https://aws.amazon.com/compliance/gdpr-center/) |
+| **KamKod** | UK / France | Development and maintenance (during contract) | DPA to be signed between CEDR and KamKod |
 
-> HubSpot and Make.com are existing CEDR tools covered under separate GDPR assessments and are therefore excluded from this section.
+> HubSpot and Make.com are existing CEDR tools covered under separate GDPR assessments and are excluded from this section.
+
+---
+
+### 6.12 Actions Required Before Production
+
+The following GDPR-related steps must be completed before the application goes live with real data:
+
+- [ ] Sign a DPA between CEDR and KamKod (covering development/maintenance activity)
+- [ ] Ensure Supabase DPA is accepted under **CEDR's** Supabase account
+- [ ] Ensure Cloudflare DPA is accepted under **CEDR's** Cloudflare account
+- [ ] Define and document CEDR's data retention policy for availability and booking data
+- [ ] Appoint a named contact for data subject rights requests
+- [ ] Add the portal to CEDR's Record of Processing Activities (ROPA)
+- [ ] Confirm with CEDR's DPO (if applicable) that the processing is within scope of the existing privacy notices
+- [ ] Decommission KamKod MVP infrastructure once production migration is complete
 
 ---
 
-*This documentation reflects the state of the MVP as of September 2026. It should be reviewed and updated prior to any production deployment or processing of real personal data.*
-
----
+*This is a preliminary document describing the application's architecture and compliance posture ahead of production deployment. It should be reviewed by CEDR's legal, IT, and data protection teams before go-live.*
 
 *Prepared by KamKod — [team@kamkod.com](mailto:team@kamkod.com)*
