@@ -169,9 +169,9 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
     || deleteGroup.isPending || updateGroup.isPending
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-6 bg-black/20" onClick={onClose}>
       <div ref={ref} onClick={e => e.stopPropagation()}
-        className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-md overflow-hidden">
+        className="bg-white rounded-t-xl shadow-popover border border-cedr-border w-full max-w-md overflow-y-auto max-h-[85vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-cedr-border">
@@ -567,9 +567,9 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose, r
     const meta = SLOT_STATUSES[slot?.status] || SLOT_STATUSES.not_set
     const canDeletePencil = isCRA && slot?.status === 'pencilled'
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
+      <div className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-6 bg-black/20" onClick={onClose}>
         <div ref={ref} onClick={e => e.stopPropagation()}
-          className="bg-white rounded-lg shadow-popover border border-cedr-border w-72 overflow-hidden">
+          className="bg-white rounded-t-xl shadow-popover border border-cedr-border w-full max-w-sm overflow-y-auto max-h-[85vh]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-cedr-border">
             <div>
               <p className="text-sm font-semibold text-cedr-navy">{format(date, 'EEE, MMM d')}</p>
@@ -656,9 +656,9 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose, r
   const dayOfWeek = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][((getDay(date) + 6) % 7)]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-6 bg-black/20" onClick={onClose}>
       <div ref={ref} onClick={e => e.stopPropagation()}
-        className="bg-white rounded-lg shadow-popover border border-cedr-border w-full max-w-2xl overflow-hidden">
+        className="bg-white rounded-t-xl shadow-popover border border-cedr-border w-full max-w-2xl overflow-y-auto max-h-[85vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-cedr-border">
