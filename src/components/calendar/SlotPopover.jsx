@@ -56,11 +56,11 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const [craFullDay,   setCraFullDay]   = useState(false)
   const [sendEmail,    setSendEmail]    = useState(false)
   const [message,      setMessage]      = useState('')
-  const [confirmDel,    setConfirmDel]    = useState(false)
-  const [seriesDel,     setSeriesDel]     = useState(false)
-  const [groupDel,      setGroupDel]      = useState(false)
-  const [dealModal,     setDealModal]     = useState(false)
-  const [conflict,      setConflict]      = useState(false)
+  const [confirmDel,   setConfirmDel]   = useState(false)
+  const [seriesDel,    setSeriesDel]    = useState(false)
+  const [groupDel,     setGroupDel]     = useState(false)
+  const [dealModal,    setDealModal]    = useState(false)
+  const [conflict,     setConflict]     = useState(false)
 
   const deleteSlot       = useDeleteSlot()
   const pencilSlot       = usePencilSlot()
@@ -71,9 +71,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const deleteGroup      = useDeleteSlotGroup()
   const updateGroup      = useUpdateSlotGroup()
 
-  // Track how many other pencilled groups were cleared when accepting
-  const [deletedOtherPencils, setDeletedOtherPencils] = useState(0)
-  const ref             = useRef()
+  const ref = useRef()
 
   useEffect(() => {
     function handle(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
@@ -86,20 +84,22 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const hubId   = activeMediatorProfile?.hubspot_mediator_object_id
 
   async function handleSaveStatus() {
-    // save available or unavailable
     await upsert.mutateAsync({ mediatorId, date: dateStr, period, status: craStatus, notes: null, mode: 'one_time' })
     onClose()
   }
 
-  async function handlePencil() {
-    if (!localCase) return
+  // Direct group status update (pencilled ↔ provisionally_booked) — no delete/recreate
+  async function handleGroupConvert() {
     setConflict(false)
     try {
-      if (slot?.group_id) {
-        // Group conversion: pencil the entire group
-        await updateGroup.mutateAsync({ groupId: slot.group_id, mediatorId, status: 'pencilled' })
-      } else {
-        await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
+      const targetStatus = craStatus === 'provisional' ? 'provisionally_booked' : 'pencilled'
+      if (targetStatus === 'provisionally_booked') {
+        const hasConflict = await checkCaseConflict(slot.case_id, slot.group_id)
+        if (hasConflict) { setConflict(true); return }
+      }
+      await updateGroup.mutateAsync({ groupId: slot.group_id, mediatorId, status: targetStatus })
+      if (targetStatus === 'provisionally_booked' && slot.case_id) {
+        await deleteOtherCasePencils(slot.case_id, slot.group_id)
       }
       onClose()
     } catch (err) {
@@ -107,23 +107,28 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
     }
   }
 
+  // Single-slot pencil (no group_id)
+  async function handlePencil() {
+    if (!localCase) return
+    setConflict(false)
+    try {
+      await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
+      onClose()
+    } catch (err) {
+      if (err?.message === 'CASE_CONFLICT') setConflict(true)
+    }
+  }
+
+  // Single-slot provisional (no group_id)
   async function handleProvisional() {
     if (!localCase) return
     setConflict(false)
     try {
-      if (slot?.group_id && isPencilled) {
-        // Group conversion: update entire group to provisionally_booked
-        await updateGroup.mutateAsync({ groupId: slot.group_id, mediatorId, status: 'provisionally_booked' })
-        // Clear all OTHER pencilled groups for this case
-        const deleted = await deleteOtherCasePencils(slot.case_id, slot.group_id, mediatorId)
-        if (deleted > 0) setDeletedOtherPencils(deleted)
-      } else {
-        await createProvis.mutateAsync({
-          mediatorId, date: dateStr, period, fullDay: craFullDay,
-          sendEmail, message: sendEmail ? message : null,
-          hubspotMediatorId: hubId, caseData: localCase,
-        })
-      }
+      await createProvis.mutateAsync({
+        mediatorId, date: dateStr, period, fullDay: craFullDay,
+        sendEmail, message: sendEmail ? message : null,
+        hubspotMediatorId: hubId, caseData: localCase,
+      })
       onClose()
     } catch (err) {
       if (err?.message === 'CASE_CONFLICT') setConflict(true)
@@ -133,12 +138,8 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const GROUP_STATUSES = ['pencilled', 'provisionally_booked', 'confirmed']
 
   async function handleDelete() {
-    if (slot?.source === 'series') {
-      setSeriesDel(true); return
-    }
-    if (slot?.group_id && GROUP_STATUSES.includes(slot?.status)) {
-      setGroupDel(true); return
-    }
+    if (slot?.source === 'series') { setSeriesDel(true); return }
+    if (slot?.group_id && GROUP_STATUSES.includes(slot?.status)) { setGroupDel(true); return }
     setConfirmDel(true)
   }
 
@@ -148,10 +149,12 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   }
 
   async function handleDeleteSeries(scope) {
+    const seriesId = slot?.series_id
+    if (!seriesId) return  // guard: series slots must have series_id
     if (scope === 'one') {
-      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.series_id })
+      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId })
     } else {
-      await deactivateSeries.mutateAsync({ seriesId: slot.series_id, fromDate: dateStr, mediatorId })
+      await deactivateSeries.mutateAsync({ seriesId, fromDate: dateStr, mediatorId })
     }
     onClose()
   }
@@ -246,7 +249,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── CONFIRM OVERWRITE (pencilled ↔ provisional) ── */}
-        {!confirmDel && !seriesDel && !groupDel && step === 'confirm_overwrite' && (
+        {!confirmDel && !seriesDel && !groupDel && step !== 'group_convert' && step === 'confirm_overwrite' && (
           <div className="p-5 space-y-4">
             <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded">
               <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
@@ -273,8 +276,38 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
           </div>
         )}
 
-        {/* ── VIEW / DEFAULT ── */}
-        {!confirmDel && !seriesDel && !groupDel && step === 'view' && (
+        {/* ── GROUP CONVERT (pencilled ↔ provisional for grouped slots) ── */}
+        {!confirmDel && !seriesDel && !groupDel && step === 'group_convert' && (
+          <div className="p-5 space-y-4">
+            {/* Case — read-only, already on the slot */}
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-cedr-light border border-cedr-border rounded">
+              <span className="text-xs text-cedr-muted shrink-0">Case:</span>
+              <span className="text-sm font-medium text-cedr-navy truncate">
+                {slot?.record_name || slot?.case_id || '—'}
+              </span>
+            </div>
+
+            {craStatus === 'provisional' && (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded">
+                <AlertTriangle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  Converting to provisional will update the entire group and delete all other pencilled dates for this case. Only one provisional booking is allowed per case.
+                </p>
+              </div>
+            )}
+            {conflict && <ConflictError />}
+            <div className="flex gap-2">
+              <button onClick={() => { setStep('view'); setConflict(false) }} className="btn-secondary flex-1 text-sm">Cancel</button>
+              <button onClick={handleGroupConvert} disabled={saving}
+                className={`flex-1 text-sm px-4 py-2 rounded font-medium text-white transition-colors disabled:opacity-50 ${
+                  craStatus === 'provisional' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-amber-600 hover:bg-amber-700'
+                }`}>
+                {saving ? 'Updating…' : craStatus === 'provisional' ? 'Convert group to Provisional' : 'Convert group to Pencil'}
+              </button>
+            </div>
+          </div>
+        )}
+        {!confirmDel && !seriesDel && !groupDel && step !== 'group_convert' && step === 'view' && (
           <div className="p-5 space-y-4">
             {/* READ-ONLY: confirmed */}
             {isConfirmed && <p className="text-xs text-cedr-muted">This slot is confirmed. No changes allowed.</p>}
@@ -311,7 +344,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                 </div>
                 <div className="flex gap-2">
                   <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
-                  <button onClick={() => { setCraStatus('provisional'); setStep('confirm_overwrite') }}
+                  <button onClick={() => {
+                    setCraStatus('provisional')
+                    setStep(slot?.group_id ? 'group_convert' : 'confirm_overwrite')
+                  }}
                     className="flex-1 text-sm px-3 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors">
                     Convert to Provisional
                   </button>
@@ -339,7 +375,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                 </div>
                 <div className="flex gap-2">
                   <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
-                  <button onClick={() => { setCraStatus('pencilled'); setStep('confirm_overwrite') }}
+                  <button onClick={() => {
+                    setCraStatus('pencilled')
+                    setStep(slot?.group_id ? 'group_convert' : 'confirm_overwrite')
+                  }}
                     className="flex items-center gap-1.5 flex-1 text-sm px-3 py-2 rounded font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors">
                     <Pencil size={13} />Convert to Pencil
                   </button>
@@ -399,7 +438,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── EDIT STATUS (available / unavailable) ── */}
-        {!confirmDel && !seriesDel && !groupDel && step === 'edit_status' && (
+        {!confirmDel && !seriesDel && !groupDel && step !== 'group_convert' && step === 'edit_status' && (
           <div className="p-5 space-y-4">
             <p className="text-sm font-medium text-cedr-navy capitalize">
               Set slot as <span className={craStatus === 'available' ? 'text-green-700' : 'text-red-700'}>{craStatus}</span>
@@ -416,13 +455,13 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── PENCIL FORM ── */}
-        {!confirmDel && !seriesDel && !groupDel && step === 'pencil_form' && (
+        {!confirmDel && !seriesDel && !groupDel && step !== 'group_convert' && step === 'pencil_form' && (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded">
               <Pencil size={14} className="text-amber-600" />
               <span className="text-sm font-semibold text-amber-800">Pencilling a slot</span>
             </div>
-            <CaseDropdown onChange={setLocalCase} />
+            <CaseDropdown value={localCase} onChange={setLocalCase} />
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={craFullDay} onChange={e => setCraFullDay(e.target.checked)}
                 className="accent-cedr-navy" />
@@ -440,13 +479,13 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── PROVISIONAL FORM ── */}
-        {!confirmDel && !seriesDel && !groupDel && step === 'provisional_form' && (
+        {!confirmDel && !seriesDel && !groupDel && step !== 'group_convert' && step === 'provisional_form' && (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded">
               <div className="w-2 h-2 rounded-full bg-purple-500" />
               <span className="text-sm font-semibold text-purple-800">Provisional Booking</span>
             </div>
-            <CaseDropdown onChange={setLocalCase} />
+            <CaseDropdown value={localCase} onChange={setLocalCase} />
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={craFullDay} onChange={e => setCraFullDay(e.target.checked)}
                 className="accent-cedr-navy" />

@@ -462,17 +462,17 @@ export function useUpdateSlotGroup() {
   })
 }
 
-// Delete all pencilled slots for a case EXCEPT the given group_id (used when confirming a mediation date)
-export async function deleteOtherCasePencils(caseId, keepGroupId, mediatorId) {
-  if (!caseId) return 0
+// Delete all pencilled slots for a case EXCEPT the given group_id
+export async function deleteOtherCasePencils(caseId, keepGroupId) {
+  if (!caseId) return
   let q = supabase
     .from('availability_slots')
     .delete()
     .eq('case_id', caseId)
     .eq('status', 'pencilled')
   if (keepGroupId) q = q.neq('group_id', keepGroupId)
-  const { count } = await q
-  return count ?? 0
+  const { error } = await q
+  if (error) throw error
 }
 
 export function useDeleteSlot() {

@@ -75,6 +75,14 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
     return ids
   }, [selectedSlots])
 
+  // Group ID of the currently open popover slot (pulse its siblings)
+  const openPopoverGroupId = popover?.slotData?.group_id || null
+
+  function isGroupPulse(slotData) {
+    if (!slotData?.group_id) return false
+    return selectedGroupIds.has(slotData.group_id) || slotData.group_id === openPopoverGroupId
+  }
+
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd   = endOfWeek(currentDate,   { weekStartsOn: 1 })
   let   days      = eachDayOfInterval({ start: weekStart, end: weekEnd })
@@ -163,7 +171,7 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                 <MergedSlotCell slotData={amSlot}
                   onClick={() => handleCellClick(day, 'morning')}
                   selected={amSel} selectMode={selectMode} past={past}
-                  groupPulse={!amSel && amSlot?.group_id && selectedGroupIds.has(amSlot.group_id)}
+                  groupPulse={!amSel && isGroupPulse(amSlot)}
                   onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
               ) : (
                 <>
@@ -172,14 +180,14 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                     selectMode={selectMode} selected={amSel} past={past}
                     highlighted={amHigh}
                     dimmed={highlightedSlots.length > 0 && !amHigh && !amSel}
-                    groupPulse={!amSel && amSlot?.group_id && selectedGroupIds.has(amSlot.group_id)}
+                    groupPulse={!amSel && isGroupPulse(amSlot)}
                     onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                   <SlotCell slotData={pmSlot} period="afternoon"
                     onClick={() => handleCellClick(day, 'afternoon')}
                     selectMode={selectMode} selected={pmSel} past={past}
                     highlighted={pmHigh}
                     dimmed={highlightedSlots.length > 0 && !pmHigh && !pmSel}
-                    groupPulse={!pmSel && pmSlot?.group_id && selectedGroupIds.has(pmSlot.group_id)}
+                    groupPulse={!pmSel && isGroupPulse(pmSlot)}
                     onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                 </>
               )}
