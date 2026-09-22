@@ -83,7 +83,7 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
 
       {/* "More info" badge — bottom-right, visible when slot has a linked HubSpot deal */}
       {onInfoClick && slotData?.hubspot_record_id && (
-        <div className="absolute bottom-1.5 right-1.5 z-20">
+        <div className="absolute bottom-1.5 right-1.5 z-30">
           <InfoBadge
             recordId={slotData.hubspot_record_id}
             recordName={slotData.record_name}

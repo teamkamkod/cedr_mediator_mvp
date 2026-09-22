@@ -47,7 +47,7 @@ function SlotBar({ slot, period, onClick, selected, past, onInfoClick }) {
         )}
       </button>
       {onInfoClick && slot.hubspot_record_id && (
-        <div className="absolute bottom-0.5 right-0.5 z-20">
+        <div className="absolute bottom-0.5 right-0.5 z-30">
           <InfoBadge recordId={slot.hubspot_record_id} recordName={slot.record_name}
             onInfoClick={({ recordId, recordName }) => onInfoClick(recordId, recordName)} />
         </div>
@@ -72,7 +72,7 @@ function MergedBar({ slot, onClick, selected, past, onInfoClick }) {
         )}
       </button>
       {onInfoClick && slot.hubspot_record_id && (
-        <div className="absolute bottom-0.5 right-0.5 z-20">
+        <div className="absolute bottom-0.5 right-0.5 z-30">
           <InfoBadge recordId={slot.hubspot_record_id} recordName={slot.record_name}
             onInfoClick={({ recordId, recordName }) => onInfoClick(recordId, recordName)} />
         </div>

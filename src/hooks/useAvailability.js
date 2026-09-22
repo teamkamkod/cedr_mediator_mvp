@@ -200,6 +200,62 @@ function buildSlotSummary(slots) {
   return `${first} – ${last} (${n} slots)`
 }
 
+// CRA: batch create pencilled slots with a shared group_id
+export function useBatchPencilSlots() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ mediatorId, slots, hubspotMediatorId, caseData }) => {
+      const userId  = (await supabase.auth.getUser()).data.user?.id
+      const groupId = crypto.randomUUID()
+
+      // Block if case already has provisionally_booked or confirmed
+      const conflict = await checkCaseConflict(caseData?.case_id)
+      if (conflict) throw new Error('CASE_CONFLICT')
+
+      await Promise.all(
+        slots.map(({ dateStr, period }) => {
+          const { slot_start, slot_end } = buildSlotTimestamps(dateStr, period)
+          return supabase.from('availability_slots').upsert({
+            mediator_id:         mediatorId,
+            date:                dateStr,
+            slot_start,
+            slot_end,
+            status:              'pencilled',
+            group_id:            groupId,
+            created_by:          userId,
+            updated_by:          userId,
+            case_id:             caseData?.case_id     || null,
+            hubspot_record_id:   caseData?.record_id   || null,
+            hubspot_object_type: caseData?.object_type || null,
+            record_name:         caseData?.record_name || null,
+          }, { onConflict: 'mediator_id,slot_start' })
+        })
+      )
+
+      const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+      await fetch(MAKE_WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          event:                      'slot_pencilled',
+          mediator_id:                mediatorId,
+          hubspot_mediator_object_id: hubspotMediatorId || null,
+          group_id:                   groupId,
+          slots:                      sorted.map(s => ({ date: s.dateStr, slot_time: s.period })),
+          case_id:                    caseData?.case_id     || null,
+          hubspot_record_id:          caseData?.record_id   || null,
+          hubspot_object_type:        caseData?.object_type || null,
+          record_name:                caseData?.record_name || null,
+        }),
+      }).catch(() => {})
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
 // CRA: batch create provisional bookings with a shared group_id
 export function useBatchCreateProvisionalBooking() {
   const qc = useQueryClient()
