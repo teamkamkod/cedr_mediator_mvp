@@ -56,6 +56,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const [sendEmail,    setSendEmail]    = useState(false)
   const [message,      setMessage]      = useState('')
   const [confirmDel,   setConfirmDel]   = useState(false)
+  const [seriesDel,    setSeriesDel]    = useState(false)   // series delete confirmation
   const [dealModal,    setDealModal]    = useState(false)
   const [conflict,     setConflict]     = useState(false)
 
@@ -63,6 +64,8 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const pencilSlot      = usePencilSlot()
   const createProvis    = useCreateProvisionalBooking()
   const upsert          = useUpsertSlot()
+  const deleteException = useDeleteSeriesException()
+  const deactivateSeries = useDeactivateSeriesFrom()
   const ref             = useRef()
 
   useEffect(() => {
@@ -108,11 +111,28 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   }
 
   async function handleDelete() {
+    if (slot?.source === 'series') {
+      setSeriesDel(true)      // → two-option series dialog
+      return
+    }
+    setConfirmDel(true)       // → standard confirm dialog for explicit slots
+  }
+
+  async function handleConfirmDelete() {
     if (slot?.id) await deleteSlot.mutateAsync({ slotId: slot.id, mediatorId })
     onClose()
   }
 
-  const saving = deleteSlot.isPending || pencilSlot.isPending || createProvis.isPending || upsert.isPending
+  async function handleDeleteSeries(scope) {
+    if (scope === 'one') {
+      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.id })
+    } else {
+      await deactivateSeries.mutateAsync({ seriesId: slot.id, fromDate: dateStr, mediatorId })
+    }
+    onClose()
+  }
+
+  const saving = deleteSlot.isPending || pencilSlot.isPending || createProvis.isPending || upsert.isPending || deleteException.isPending || deactivateSeries.isPending
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
@@ -137,7 +157,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
           </div>
         </div>
 
-        {/* ── DELETE CONFIRM ── */}
+        {/* ── DELETE CONFIRM (explicit slot) ── */}
         {confirmDel && (
           <div className="p-5 space-y-4">
             <p className="text-sm font-medium text-red-700 flex items-center gap-2">
@@ -145,11 +165,30 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
             </p>
             <div className="flex gap-2">
               <button onClick={() => setConfirmDel(false)} className="btn-secondary flex-1 text-xs">Cancel</button>
-              <button onClick={handleDelete} disabled={saving}
+              <button onClick={handleConfirmDelete} disabled={saving}
                 className="flex-1 text-xs px-4 py-2 rounded font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50">
                 {saving ? 'Deleting…' : 'Delete'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ── DELETE SERIES (recurring slot) ── */}
+        {seriesDel && (
+          <div className="p-5 space-y-3">
+            <p className="text-sm font-medium text-red-700 flex items-center gap-2">
+              <Trash2 size={15} />Delete recurring slot — which occurrences?
+            </p>
+            {[
+              { label: `This ${period === 'morning' ? 'AM' : 'PM'} only`,       scope: 'one'    },
+              { label: 'This and all future occurrences',                        scope: 'future' },
+            ].map(({ label, scope }) => (
+              <button key={scope} onClick={() => handleDeleteSeries(scope)} disabled={saving}
+                className="w-full text-left px-4 py-3 rounded border border-red-200 bg-red-50 hover:bg-red-100 text-sm text-red-800 transition-colors disabled:opacity-50">
+                {saving ? 'Deleting…' : label}
+              </button>
+            ))}
+            <button onClick={() => setSeriesDel(false)} className="btn-secondary w-full text-sm">Cancel</button>
           </div>
         )}
 
@@ -193,7 +232,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                 <p className="text-xs text-cedr-muted">Ask Me slots are set by the mediator. You can only delete this slot.</p>
                 <div className="flex gap-2">
                   <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
-                  <button onClick={() => setConfirmDel(true)}
+                  <button onClick={handleDelete}
                     className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 transition-colors">
                     <Trash2 size={13} />Delete
                   </button>
@@ -223,7 +262,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                     className="flex-1 text-sm px-3 py-2 rounded font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors">
                     Convert to Provisional
                   </button>
-                  <button onClick={() => setConfirmDel(true)}
+                  <button onClick={handleDelete}
                     className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
                     <Trash2 size={14} />
                   </button>
@@ -251,7 +290,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                     className="flex items-center gap-1.5 flex-1 text-sm px-3 py-2 rounded font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors">
                     <Pencil size={13} />Convert to Pencil
                   </button>
-                  <button onClick={() => setConfirmDel(true)}
+                  <button onClick={handleDelete}
                     className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
                     <Trash2 size={14} />
                   </button>
@@ -286,7 +325,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
                   <span className="text-sm font-semibold text-purple-800">Provisional Booking</span>
                 </button>
                 {currentStatus !== 'not_set' && (
-                  <button onClick={() => setConfirmDel(true)}
+                  <button onClick={handleDelete}
                     className="flex items-center justify-center gap-1.5 w-full py-2 rounded text-xs text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors">
                     <Trash2 size={12} />Remove slot
                   </button>
@@ -297,7 +336,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
             {isConfirmed && (
               <div className="flex gap-2">
                 <button onClick={onClose} className="btn-secondary flex-1 text-sm">Close</button>
-                <button onClick={() => setConfirmDel(true)}
+                <button onClick={handleDelete}
                   className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors">
                   <Trash2 size={14} />
                 </button>
