@@ -622,6 +622,11 @@ export function useRespondToBooking() {
           .update({ status: 'provisionally_booked' })
           .eq('id', slotId)
         if (error) throw error
+
+        // Remove all other pencilled slots for this case (other dates/groups no longer relevant)
+        if (caseId) {
+          await deleteOtherCasePencils(caseId, groupId || null)
+        }
       } else {
         // decline → delete
         const { error } = await supabase
