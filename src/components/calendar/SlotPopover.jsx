@@ -6,7 +6,7 @@ import { SLOT_STATUSES, EDITABLE_STATUSES, CRA_EDITABLE_STATUSES, RECURRENCE_FRE
 import {
   useUpsertSlot, useCreateSeries,
   useDeleteSlot, useDeleteSeriesException, useDeactivateSeriesFrom,
-  usePencilSlot, useCreateProvisionalBooking,
+  usePencilSlot, useCreateProvisionalBooking, useDeleteSlotGroup,
 } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 import { useCase } from '../../lib/CaseContext'
@@ -55,17 +55,19 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const [craFullDay,   setCraFullDay]   = useState(false)
   const [sendEmail,    setSendEmail]    = useState(false)
   const [message,      setMessage]      = useState('')
-  const [confirmDel,   setConfirmDel]   = useState(false)
-  const [seriesDel,    setSeriesDel]    = useState(false)   // series delete confirmation
-  const [dealModal,    setDealModal]    = useState(false)
-  const [conflict,     setConflict]     = useState(false)
+  const [confirmDel,    setConfirmDel]    = useState(false)
+  const [seriesDel,     setSeriesDel]     = useState(false)
+  const [groupDel,      setGroupDel]      = useState(false)
+  const [dealModal,     setDealModal]     = useState(false)
+  const [conflict,      setConflict]      = useState(false)
 
-  const deleteSlot      = useDeleteSlot()
-  const pencilSlot      = usePencilSlot()
-  const createProvis    = useCreateProvisionalBooking()
-  const upsert          = useUpsertSlot()
-  const deleteException = useDeleteSeriesException()
+  const deleteSlot       = useDeleteSlot()
+  const pencilSlot       = usePencilSlot()
+  const createProvis     = useCreateProvisionalBooking()
+  const upsert           = useUpsertSlot()
+  const deleteException  = useDeleteSeriesException()
   const deactivateSeries = useDeactivateSeriesFrom()
+  const deleteGroup      = useDeleteSlotGroup()
   const ref             = useRef()
 
   useEffect(() => {
@@ -110,12 +112,16 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
     }
   }
 
+  const GROUP_STATUSES = ['pencilled', 'provisionally_booked', 'confirmed']
+
   async function handleDelete() {
     if (slot?.source === 'series') {
-      setSeriesDel(true)      // → two-option series dialog
-      return
+      setSeriesDel(true); return
     }
-    setConfirmDel(true)       // → standard confirm dialog for explicit slots
+    if (slot?.group_id && GROUP_STATUSES.includes(slot?.status)) {
+      setGroupDel(true); return
+    }
+    setConfirmDel(true)
   }
 
   async function handleConfirmDelete() {
@@ -132,7 +138,14 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
     onClose()
   }
 
-  const saving = deleteSlot.isPending || pencilSlot.isPending || createProvis.isPending || upsert.isPending || deleteException.isPending || deactivateSeries.isPending
+  async function handleDeleteGroup() {
+    await deleteGroup.mutateAsync({ groupId: slot.group_id, mediatorId })
+    onClose()
+  }
+
+  const saving = deleteSlot.isPending || pencilSlot.isPending || createProvis.isPending
+    || upsert.isPending || deleteException.isPending || deactivateSeries.isPending
+    || deleteGroup.isPending
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
@@ -192,8 +205,30 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
           </div>
         )}
 
+        {/* ── DELETE GROUP (pencilled / prov / confirmed with group_id) ── */}
+        {groupDel && (
+          <div className="p-5 space-y-3">
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded">
+              <Trash2 size={15} className="text-red-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-red-800">Delete entire mediation date?</p>
+                <p className="text-xs text-red-600 mt-0.5">
+                  This slot belongs to a mediation date group. All slots in this group will be deleted.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setGroupDel(false)} className="btn-secondary flex-1 text-sm">Cancel</button>
+              <button onClick={handleDeleteGroup} disabled={saving}
+                className="flex-1 text-sm px-4 py-2 rounded font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50">
+                {saving ? 'Deleting…' : 'Delete all slots in group'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── CONFIRM OVERWRITE (pencilled ↔ provisional) ── */}
-        {!confirmDel && step === 'confirm_overwrite' && (
+        {!confirmDel && !seriesDel && !groupDel && step === 'confirm_overwrite' && (
           <div className="p-5 space-y-4">
             <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded">
               <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
@@ -221,7 +256,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── VIEW / DEFAULT ── */}
-        {!confirmDel && step === 'view' && (
+        {!confirmDel && !seriesDel && !groupDel && step === 'view' && (
           <div className="p-5 space-y-4">
             {/* READ-ONLY: confirmed */}
             {isConfirmed && <p className="text-xs text-cedr-muted">This slot is confirmed. No changes allowed.</p>}
@@ -346,7 +381,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── EDIT STATUS (available / unavailable) ── */}
-        {!confirmDel && step === 'edit_status' && (
+        {!confirmDel && !seriesDel && !groupDel && step === 'edit_status' && (
           <div className="p-5 space-y-4">
             <p className="text-sm font-medium text-cedr-navy capitalize">
               Set slot as <span className={craStatus === 'available' ? 'text-green-700' : 'text-red-700'}>{craStatus}</span>
@@ -363,7 +398,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── PENCIL FORM ── */}
-        {!confirmDel && step === 'pencil_form' && (
+        {!confirmDel && !seriesDel && !groupDel && step === 'pencil_form' && (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded">
               <Pencil size={14} className="text-amber-600" />
@@ -387,7 +422,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
         )}
 
         {/* ── PROVISIONAL FORM ── */}
-        {!confirmDel && step === 'provisional_form' && (
+        {!confirmDel && !seriesDel && !groupDel && step === 'provisional_form' && (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded">
               <div className="w-2 h-2 rounded-full bg-purple-500" />

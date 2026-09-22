@@ -408,6 +408,42 @@ export function useCreateProvisionalBooking() {
 }
 
 // Delete an explicit slot entirely
+// Delete multiple slots by ID (bulk select mode delete)
+export function useDeleteSlots() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ slotIds, mediatorId }) => {
+      const { error } = await supabase
+        .from('availability_slots')
+        .delete()
+        .in('id', slotIds)
+      if (error) throw error
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+// Delete all slots sharing a group_id (mediation_date group deletion)
+export function useDeleteSlotGroup() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ groupId, mediatorId }) => {
+      const { error } = await supabase
+        .from('availability_slots')
+        .delete()
+        .eq('group_id', groupId)
+      if (error) throw error
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
 export function useDeleteSlot() {
   const qc = useQueryClient()
   return useMutation({

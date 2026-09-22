@@ -124,6 +124,7 @@ export default function CalendarPage() {
       {selectMode && selectedSlots.length > 0 && (
         <FloatingActionBar
           selectedSlots={selectedSlots}
+          mediatorId={mediatorId}
           onClear={() => setSelectedSlots([])}
           onAction={() => setShowBatchPopover(true)}
         />
