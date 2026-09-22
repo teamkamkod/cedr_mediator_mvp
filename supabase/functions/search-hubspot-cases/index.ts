@@ -18,11 +18,11 @@ async function fetchDeals() {
     const body: Record<string, unknown> = {
       filterGroups: [{
         filters: [
-          { propertyName: 'pipeline',   operator: 'EQ',           value: PIPELINE },
-          { propertyName: 'enquiry_id', operator: 'HAS_PROPERTY'                  },
+          { propertyName: 'pipeline',          operator: 'EQ',           value: PIPELINE },
+          { propertyName: 'enquiry_id_string', operator: 'HAS_PROPERTY'                  },
         ],
       }],
-      properties: ['enquiry_id', 'dealname'],
+      properties: ['enquiry_id_string', 'dealname'],
       limit: 100,
     }
     if (after) body.after = after
@@ -36,7 +36,7 @@ async function fetchDeals() {
     const data = await res.json()
 
     for (const d of (data.results || [])) {
-      const caseId = d.properties?.enquiry_id
+      const caseId = d.properties?.enquiry_id_string
       if (!caseId) continue
       results.push({
         object_type: 'deal',
@@ -49,13 +49,11 @@ async function fetchDeals() {
     if (data.paging?.next?.after) after = data.paging.next.after
     else break
   }
-
   return results
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) return new Response('Unauthorized', { status: 401, headers: CORS })
@@ -72,7 +70,6 @@ serve(async (req) => {
     const q = (query || '').trim().toLowerCase()
 
     const deals = await fetchDeals()
-
     const results = q.length >= 2
       ? deals.filter(d =>
           d.case_id.toLowerCase().includes(q) ||
