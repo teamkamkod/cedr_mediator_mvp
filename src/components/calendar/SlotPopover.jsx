@@ -30,6 +30,8 @@ function ConflictError() {
 // CRA ADAPTIVE SECTION — handles all CRA slot interactions
 // ─────────────────────────────────────────────────────────────
 function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMediatorProfile }) {
+  const { selectedCase } = useCase()   // ← must be before useState that uses it
+
   const currentStatus = slot?.status || 'not_set'
   const isMutableBase = ['not_set','available','unavailable'].includes(currentStatus)
   const isAskMe       = currentStatus === 'ask_me'
@@ -37,10 +39,9 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const isProvisional = currentStatus === 'provisionally_booked'
   const isConfirmed   = currentStatus === 'confirmed'
 
-  const [step,         setStep]         = useState('view')  // 'view'|'edit_status'|'pencil_form'|'provisional_form'|'confirm_overwrite'
-  const [craStatus,    setCraStatus]    = useState(null)    // chosen status in edit_status step
+  const [step,         setStep]         = useState('view')
+  const [craStatus,    setCraStatus]    = useState(null)
   const [localCase,    setLocalCase]    = useState(() => {
-    // Carry forward case context from existing slot (pencilled / provisional)
     if (slot?.case_id) {
       return {
         case_id:     slot.case_id,
