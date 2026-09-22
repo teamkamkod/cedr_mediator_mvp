@@ -7,6 +7,7 @@ import {
   useUpsertSlot, useCreateSeries,
   useDeleteSlot, useDeleteSeriesException, useDeactivateSeriesFrom,
   usePencilSlot, useCreateProvisionalBooking, useDeleteSlotGroup,
+  useUpdateSlotGroup, deleteOtherCasePencils,
 } from '../../hooks/useAvailability'
 import { useAuth } from '../../lib/auth'
 import { useCase } from '../../lib/CaseContext'
@@ -68,6 +69,10 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
   const deleteException  = useDeleteSeriesException()
   const deactivateSeries = useDeactivateSeriesFrom()
   const deleteGroup      = useDeleteSlotGroup()
+  const updateGroup      = useUpdateSlotGroup()
+
+  // Track how many other pencilled groups were cleared when accepting
+  const [deletedOtherPencils, setDeletedOtherPencils] = useState(0)
   const ref             = useRef()
 
   useEffect(() => {
@@ -90,7 +95,12 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
     if (!localCase) return
     setConflict(false)
     try {
-      await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
+      if (slot?.group_id) {
+        // Group conversion: pencil the entire group
+        await updateGroup.mutateAsync({ groupId: slot.group_id, mediatorId, status: 'pencilled' })
+      } else {
+        await pencilSlot.mutateAsync({ mediatorId, date: dateStr, period, fullDay: craFullDay, caseData: localCase, hubspotMediatorId: hubId })
+      }
       onClose()
     } catch (err) {
       if (err?.message === 'CASE_CONFLICT') setConflict(true)
@@ -101,11 +111,19 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
     if (!localCase) return
     setConflict(false)
     try {
-      await createProvis.mutateAsync({
-        mediatorId, date: dateStr, period, fullDay: craFullDay,
-        sendEmail, message: sendEmail ? message : null,
-        hubspotMediatorId: hubId, caseData: localCase,
-      })
+      if (slot?.group_id && isPencilled) {
+        // Group conversion: update entire group to provisionally_booked
+        await updateGroup.mutateAsync({ groupId: slot.group_id, mediatorId, status: 'provisionally_booked' })
+        // Clear all OTHER pencilled groups for this case
+        const deleted = await deleteOtherCasePencils(slot.case_id, slot.group_id, mediatorId)
+        if (deleted > 0) setDeletedOtherPencils(deleted)
+      } else {
+        await createProvis.mutateAsync({
+          mediatorId, date: dateStr, period, fullDay: craFullDay,
+          sendEmail, message: sendEmail ? message : null,
+          hubspotMediatorId: hubId, caseData: localCase,
+        })
+      }
       onClose()
     } catch (err) {
       if (err?.message === 'CASE_CONFLICT') setConflict(true)
@@ -131,9 +149,9 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
 
   async function handleDeleteSeries(scope) {
     if (scope === 'one') {
-      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.id })
+      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.series_id })
     } else {
-      await deactivateSeries.mutateAsync({ seriesId: slot.id, fromDate: dateStr, mediatorId })
+      await deactivateSeries.mutateAsync({ seriesId: slot.series_id, fromDate: dateStr, mediatorId })
     }
     onClose()
   }
@@ -145,7 +163,7 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
 
   const saving = deleteSlot.isPending || pencilSlot.isPending || createProvis.isPending
     || upsert.isPending || deleteException.isPending || deactivateSeries.isPending
-    || deleteGroup.isPending
+    || deleteGroup.isPending || updateGroup.isPending
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20" onClick={onClose}>
@@ -447,6 +465,14 @@ function CRAAdaptiveSection({ slot, date, period, mediatorId, onClose, activeMed
               <textarea value={message} onChange={e => setMessage(e.target.value)}
                 placeholder="Optional message…" rows={2} className="input text-xs resize-none" />
             )}
+            {isPencilled && slot?.group_id && slot?.case_id && (
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded">
+                <AlertTriangle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  Converting to provisional will also delete all other pencilled dates for this case.
+                </p>
+              </div>
+            )}
             {conflict && <ConflictError />}
             <div className="flex gap-2">
               <button onClick={() => { setStep('view'); setConflict(false) }} className="btn-secondary flex-1 text-sm">Back</button>
@@ -580,9 +606,9 @@ export default function SlotPopover({ slot, date, period, mediatorId, onClose, r
   async function confirmDeleteSeries(scope) {
     const dateStr = format(date, 'yyyy-MM-dd')
     if (scope === 'one') {
-      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.id })
+      await deleteException.mutateAsync({ mediatorId, date: dateStr, period, seriesId: slot.series_id })
     } else {
-      await deactivateSeries.mutateAsync({ seriesId: slot.id, fromDate: dateStr, mediatorId })
+      await deactivateSeries.mutateAsync({ seriesId: slot.series_id, fromDate: dateStr, mediatorId })
     }
     onClose()
   }

@@ -444,6 +444,37 @@ export function useDeleteSlotGroup() {
   })
 }
 
+// Update all slots in a group to a new status (for pencil↔provisional group conversion)
+export function useUpdateSlotGroup() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ groupId, mediatorId, status }) => {
+      const { error } = await supabase
+        .from('availability_slots')
+        .update({ status })
+        .eq('group_id', groupId)
+      if (error) throw error
+    },
+    onSuccess: (_, { mediatorId }) => {
+      qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
+      qc.invalidateQueries({ queryKey: ['provisional', mediatorId] })
+    },
+  })
+}
+
+// Delete all pencilled slots for a case EXCEPT the given group_id (used when confirming a mediation date)
+export async function deleteOtherCasePencils(caseId, keepGroupId, mediatorId) {
+  if (!caseId) return 0
+  let q = supabase
+    .from('availability_slots')
+    .delete()
+    .eq('case_id', caseId)
+    .eq('status', 'pencilled')
+  if (keepGroupId) q = q.neq('group_id', keepGroupId)
+  const { count } = await q
+  return count ?? 0
+}
+
 export function useDeleteSlot() {
   const qc = useQueryClient()
   return useMutation({

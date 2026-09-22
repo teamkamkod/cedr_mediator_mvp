@@ -7,12 +7,13 @@ const statusStyles = {
   available:            'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
   unavailable:          'bg-red-50 border-red-200 text-red-600 hover:bg-red-100',
   ask_me:               'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
+  pencilled:            'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100',
   provisionally_booked: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
   confirmed:            'bg-cyan-50 border-cyan-200 text-cyan-800 hover:bg-cyan-100',
   not_set:              'bg-white border-cedr-border text-cedr-muted/50 hover:bg-cedr-light hover:border-cedr-muted/30',
 }
 
-export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false, onInfoClick = null }) {
+export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false, onInfoClick = null, groupPulse = false }) {
   const { status = 'not_set', source, cases } = slotData || {}
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
 
@@ -45,7 +46,8 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
           selected ? selectedStyle : statusStyles[status],
           'min-h-[90px]',
           selectMode && !selected && 'cursor-cell hover:ring-2 hover:ring-cedr-navy/20',
-          highlighted && 'border-cedr-navy border-2'
+          highlighted && 'border-cedr-navy border-2',
+          groupPulse && 'ring-2 ring-green-500 animate-pulse'
         )}>
         <div className="flex items-center justify-between w-full">
           <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">

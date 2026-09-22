@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { startOfWeek, endOfWeek, eachDayOfInterval, format, isToday } from 'date-fns'
 import { clsx } from 'clsx'
 import SlotCell from './SlotCell'
@@ -22,12 +22,13 @@ const statusStyles = {
   available:            'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
   unavailable:          'bg-red-50 border-red-200 text-red-600 hover:bg-red-100',
   ask_me:               'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
+  pencilled:            'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100',
   provisionally_booked: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
   confirmed:            'bg-cyan-50 border-cyan-200 text-cyan-800 hover:bg-cyan-100',
   not_set:              'bg-white border-cedr-border text-cedr-muted/50 hover:bg-cedr-light hover:border-cedr-muted/30',
 }
 
-function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoClick }) {
+function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoClick, groupPulse }) {
   const { status } = slotData
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
   const selectedStyle = 'bg-cedr-navy/10 border-cedr-navy ring-2 ring-cedr-navy/30 text-cedr-navy'
@@ -38,7 +39,8 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoC
           'w-full h-full flex flex-col gap-1 px-3 py-3 border rounded transition-all text-left',
           selected ? selectedStyle : statusStyles[status],
           'min-h-[188px]',
-          selectMode && !selected && 'cursor-cell hover:ring-2 hover:ring-cedr-navy/20'
+          selectMode && !selected && 'cursor-cell hover:ring-2 hover:ring-cedr-navy/20',
+          groupPulse && 'ring-2 ring-green-500 animate-pulse'
         )}>
         <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">Full day</span>
         {status !== 'not_set' && !selected && (
@@ -61,8 +63,17 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoC
 
 export default function WeekView({ currentDate, slots, series, mediatorId, selectMode, selectedSlots, onToggleSlot, showWeekends, highlightedSlots = [], onToggleHighlight = null }) {
   const [popover,    setPopover]    = useState(null)
-  const [dealModal,  setDealModal]  = useState(null) // { recordId, recordName }
+  const [dealModal,  setDealModal]  = useState(null)
   const { isCRA } = useAuth()
+
+  // Group IDs of currently selected booking slots (for visual pulse highlight)
+  const selectedGroupIds = useMemo(() => {
+    const ids = new Set()
+    selectedSlots?.forEach(s => {
+      if (s.slotData?.group_id) ids.add(s.slotData.group_id)
+    })
+    return ids
+  }, [selectedSlots])
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd   = endOfWeek(currentDate,   { weekStartsOn: 1 })
@@ -152,6 +163,7 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                 <MergedSlotCell slotData={amSlot}
                   onClick={() => handleCellClick(day, 'morning')}
                   selected={amSel} selectMode={selectMode} past={past}
+                  groupPulse={!amSel && amSlot?.group_id && selectedGroupIds.has(amSlot.group_id)}
                   onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
               ) : (
                 <>
@@ -160,12 +172,14 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
                     selectMode={selectMode} selected={amSel} past={past}
                     highlighted={amHigh}
                     dimmed={highlightedSlots.length > 0 && !amHigh && !amSel}
+                    groupPulse={!amSel && amSlot?.group_id && selectedGroupIds.has(amSlot.group_id)}
                     onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                   <SlotCell slotData={pmSlot} period="afternoon"
                     onClick={() => handleCellClick(day, 'afternoon')}
                     selectMode={selectMode} selected={pmSel} past={past}
                     highlighted={pmHigh}
                     dimmed={highlightedSlots.length > 0 && !pmHigh && !pmSel}
+                    groupPulse={!pmSel && pmSlot?.group_id && selectedGroupIds.has(pmSlot.group_id)}
                     onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
                 </>
               )}

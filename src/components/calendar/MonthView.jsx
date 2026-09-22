@@ -19,6 +19,7 @@ const statusStyles = {
   available:            'bg-green-50 text-green-800',
   unavailable:          'bg-red-50 text-red-600',
   ask_me:               'bg-amber-50 text-amber-800',
+  pencilled:            'bg-amber-50 text-amber-800',
   provisionally_booked: 'bg-purple-50 text-purple-800',
   confirmed:            'bg-cyan-50 text-cyan-800',
   not_set:              'bg-white text-cedr-muted/50',
