@@ -8,6 +8,7 @@ import { SLOT_STATUSES } from '../../lib/constants'
 import { useAuth } from '../../lib/auth'
 import { isPastDate } from '../../lib/dateUtils'
 import DealInfoModal from '../common/DealInfoModal'
+import InfoBadge from '../common/InfoBadge'
 
 const CRA_BOOKABLE = ['not_set', 'available'] // used for select mode only
 
@@ -26,7 +27,7 @@ const statusStyles = {
   not_set:              'bg-white border-cedr-border text-cedr-muted/50 hover:bg-cedr-light hover:border-cedr-muted/30',
 }
 
-function MergedSlotCell({ slotData, onClick, selected, selectMode, past }) {
+function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoClick }) {
   const { status } = slotData
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
   const selectedStyle = 'bg-cedr-navy/10 border-cedr-navy ring-2 ring-cedr-navy/30 text-cedr-navy'
@@ -44,7 +45,16 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past }) {
           <span className="text-sm font-semibold leading-tight">{meta.label}</span>
         )}
       </button>
-      {past && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none" />}
+      {onInfoClick && slotData?.hubspot_record_id && (
+        <div className="absolute bottom-1.5 right-1.5 z-30">
+          <InfoBadge
+            recordId={slotData.hubspot_record_id}
+            recordName={slotData.record_name}
+            onInfoClick={({ recordId, recordName }) => onInfoClick(recordId, recordName)}
+          />
+        </div>
+      )}
+      {past && <div className="absolute inset-0 bg-gray-400/25 rounded pointer-events-none z-10" />}
     </div>
   )
 }
@@ -142,7 +152,8 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
               {merged ? (
                 <MergedSlotCell slotData={amSlot}
                   onClick={() => handleCellClick(day, 'morning')}
-                  selected={amSel} selectMode={selectMode} past={past} />
+                  selected={amSel} selectMode={selectMode} past={past}
+                  onInfoClick={(rid, rname) => setDealModal({ recordId: rid, recordName: rname })} />
               ) : (
                 <>
                   <SlotCell slotData={amSlot} period="morning"
