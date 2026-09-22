@@ -472,7 +472,8 @@ export function useUpdateSlotGroup() {
   })
 }
 
-// Delete all pencilled slots for a case EXCEPT the given group_id
+// Delete all pencilled slots for a case EXCEPT the given group_id.
+// Uses OR to also catch solo slots (group_id IS NULL), since NULL != uuid evaluates to NULL in SQL.
 export async function deleteOtherCasePencils(caseId, keepGroupId) {
   if (!caseId) return
   let q = supabase
@@ -480,7 +481,10 @@ export async function deleteOtherCasePencils(caseId, keepGroupId) {
     .delete()
     .eq('case_id', caseId)
     .eq('status', 'pencilled')
-  if (keepGroupId) q = q.neq('group_id', keepGroupId)
+  if (keepGroupId) {
+    // delete where group_id is different OR group_id is null (solo slots)
+    q = q.or(`group_id.neq.${keepGroupId},group_id.is.null`)
+  }
   const { error } = await q
   if (error) throw error
 }
