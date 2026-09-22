@@ -2,6 +2,9 @@ import { clsx } from 'clsx'
 import { Repeat, Check } from 'lucide-react'
 import { SLOT_STATUSES } from '../../lib/constants'
 import InfoBadge from '../common/InfoBadge'
+import { useAuth } from '../../lib/auth'
+
+const CASE_STATUSES = ['pencilled', 'provisionally_booked', 'confirmed']
 
 const statusStyles = {
   available:            'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
@@ -15,7 +18,13 @@ const statusStyles = {
 
 export default function SlotCell({ slotData, period, onClick, compact = false, selectMode = false, selected = false, past = false, highlighted = false, dimmed = false, onInfoClick = null, groupPulse = false }) {
   const { status = 'not_set', source, record_name } = slotData || {}
+  const { isCRA, isSuperAdmin } = useAuth()
   const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
+
+  // CRA/admin see the deal name; clerk/mediator see the case reference number
+  const caseLabel = (isCRA || isSuperAdmin)
+    ? (record_name || null)
+    : (slotData?.case_id || null)
 
   const selectedStyle = 'bg-cedr-navy/10 border-cedr-navy ring-2 ring-cedr-navy/30 text-cedr-navy'
 
@@ -63,8 +72,8 @@ export default function SlotCell({ slotData, period, onClick, compact = false, s
         {status !== 'not_set' && !selected && (
           <>
             <span className="text-sm font-semibold leading-tight">{meta.label}</span>
-            {record_name && ['pencilled', 'provisionally_booked', 'confirmed'].includes(status) && (
-              <span className="text-[10px] text-current opacity-70 truncate leading-tight">{record_name}</span>
+            {caseLabel && CASE_STATUSES.includes(status) && (
+              <span className="text-[10px] text-current opacity-70 truncate leading-tight">{caseLabel}</span>
             )}
           </>
         )}

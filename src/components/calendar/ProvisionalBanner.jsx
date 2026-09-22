@@ -23,16 +23,23 @@ function buildCaseGroups(slots) {
 
   // 2. Build a mediation-date object per bucket
   const dates = Object.entries(bucketMap).map(([key, ss]) => {
-    const sorted  = [...ss].sort((a, b) => a.period.localeCompare(b.period))
-    const hasAM   = sorted.some(s => s.period === 'morning')
-    const hasPM   = sorted.some(s => s.period === 'afternoon')
-    const isFullDay = hasAM && hasPM
+    const sorted      = [...ss].sort((a, b) => a.date.localeCompare(b.date) || a.period.localeCompare(b.period))
+    const uniqueDates = new Set(sorted.map(s => s.date))
+    const isMultiDay  = uniqueDates.size > 1
+    const hasAM       = sorted.some(s => s.period === 'morning')
+    const hasPM       = sorted.some(s => s.period === 'afternoon')
+    const isFullDay   = !isMultiDay && hasAM && hasPM   // AM+PM on SAME day only
+    const fromDate    = sorted[0].date
+    const toDate      = sorted[sorted.length - 1].date
     return {
       key,
       group_id:            sorted[0].group_id || null,
-      date:                sorted[0].date,
+      date:                fromDate,
+      fromDate,
+      toDate,
       isFullDay,
-      period:              isFullDay ? null : sorted[0].period,
+      isMultiDay,
+      period:              (isFullDay || isMultiDay) ? null : sorted[0].period,
       slots:               sorted,
       case_id:             sorted[0].case_id            || null,
       record_name:         sorted[0].record_name        || null,
@@ -71,8 +78,14 @@ function DateRow({ d, mediatorId, hubspotMediatorId, respond }) {
   const { setCurrentDate } = useCalendar()
   const navigate = useNavigate()
 
-  const dateLabel   = format(parseISO(d.date), 'EEE d MMM')
+  const firstLabel  = format(parseISO(d.fromDate), 'EEE d MMM')
+  const lastLabel   = format(parseISO(d.toDate),   'EEE d MMM')
   const periodLabel = d.isFullDay ? 'Full day' : d.period === 'morning' ? 'AM' : 'PM'
+
+  // Label shown in the row and in confirming state
+  const dateDisplay = d.isMultiDay
+    ? `From ${firstLabel} to ${lastLabel}`
+    : `${firstLabel} · ${periodLabel}`
 
   function handleView() {
     setCurrentDate(parseISO(d.date))
@@ -119,7 +132,7 @@ function DateRow({ d, mediatorId, hubspotMediatorId, respond }) {
       <AlertTriangle size={11} className="text-white/60 shrink-0" />
       <span className="text-xs text-white/90 flex-1">
         {confirming === 'accept' ? 'Accept' : 'Decline'}{' '}
-        <span className="font-semibold">{dateLabel} · {periodLabel}</span>?
+        <span className="font-semibold">{dateDisplay}</span>?
       </span>
       <button onClick={() => setConfirming(null)}
         className="px-2 py-0.5 rounded text-xs text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors">
@@ -139,8 +152,7 @@ function DateRow({ d, mediatorId, hubspotMediatorId, respond }) {
   // — Default row
   return (
     <div className="flex items-center gap-2 pl-4 pr-3 py-2 border-l-2 border-purple-400/40 hover:bg-white/5 transition-colors">
-      <span className="text-sm font-medium text-white flex-1">{dateLabel}</span>
-      <span className="text-xs text-purple-300 mr-1">{periodLabel}</span>
+      <span className="text-sm font-medium text-white flex-1">{dateDisplay}</span>
       <div className="flex gap-1 shrink-0">
         <button onClick={handleView}
           className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-white/70 bg-white/10 hover:bg-white/20 transition-colors">
@@ -163,7 +175,12 @@ function DateRow({ d, mediatorId, hubspotMediatorId, respond }) {
 
 function CaseSection({ caseGroup, mediatorId, hubspotMediatorId, respond }) {
   const [dealModal, setDealModal] = useState(false)
-  const count = caseGroup.dates.length
+  const { isCRA, isSuperAdmin }   = useAuth()
+  const count     = caseGroup.dates.length
+  // CRA/admin see deal name; clerk/mediator see case reference number
+  const caseLabel = (isCRA || isSuperAdmin)
+    ? (caseGroup.record_name || `Case ${caseGroup.case_id?.slice(0, 8) || '—'}`)
+    : (caseGroup.case_id     || '—')
 
   return (
     <div className="rounded-lg overflow-hidden border border-white/15">
@@ -171,7 +188,7 @@ function CaseSection({ caseGroup, mediatorId, hubspotMediatorId, respond }) {
       <div className="flex items-center gap-2 px-3 py-2 bg-white/10">
         <div className="w-2 h-2 rounded-full bg-purple-300 shrink-0" />
         <span className="text-sm font-semibold text-white truncate flex-1">
-          {caseGroup.record_name || `Case ${caseGroup.case_id?.slice(0, 8) || '—'}`}
+          {caseLabel}
         </span>
         {caseGroup.hubspot_record_id && (
           <InfoBadge

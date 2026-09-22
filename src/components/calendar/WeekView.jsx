@@ -10,6 +10,8 @@ import { isPastDate } from '../../lib/dateUtils'
 import DealInfoModal from '../common/DealInfoModal'
 import InfoBadge from '../common/InfoBadge'
 
+const CASE_STATUSES = ['pencilled', 'provisionally_booked', 'confirmed']
+
 const CRA_BOOKABLE = ['not_set', 'available'] // used for select mode only
 
 function canMerge(am, pm) {
@@ -30,7 +32,9 @@ const statusStyles = {
 
 function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoClick, groupPulse }) {
   const { status } = slotData
-  const meta = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
+  const { isCRA, isSuperAdmin } = useAuth()
+  const meta      = SLOT_STATUSES[status] || SLOT_STATUSES.not_set
+  const caseLabel = (isCRA || isSuperAdmin) ? slotData?.record_name : slotData?.case_id
   const selectedStyle = 'bg-cedr-navy/10 border-cedr-navy ring-2 ring-cedr-navy/30 text-cedr-navy'
   return (
     <div className="relative min-h-[188px]">
@@ -46,8 +50,8 @@ function MergedSlotCell({ slotData, onClick, selected, selectMode, past, onInfoC
         {status !== 'not_set' && !selected && (
           <>
             <span className="text-sm font-semibold leading-tight">{meta.label}</span>
-            {slotData?.record_name && ['pencilled', 'provisionally_booked', 'confirmed'].includes(status) && (
-              <span className="text-[10px] text-current opacity-70 truncate leading-tight">{slotData.record_name}</span>
+            {caseLabel && CASE_STATUSES.includes(status) && (
+              <span className="text-[10px] text-current opacity-70 truncate leading-tight">{caseLabel}</span>
             )}
           </>
         )}
