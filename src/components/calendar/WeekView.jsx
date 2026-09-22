@@ -96,7 +96,6 @@ export default function WeekView({ currentDate, slots, series, mediatorId, selec
 
     if (selectMode) {
       if (past) return
-      if (isCRA && !CRA_BOOKABLE.includes(slotData.status)) return
       onToggleSlot({ date: day, dateStr, period, slotData })
       return
     }

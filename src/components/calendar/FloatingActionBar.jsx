@@ -3,7 +3,7 @@ import { X, Trash2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
 import { useDeleteSlots } from '../../hooks/useAvailability'
 
-const BOOKABLE_STATUSES = ['available', 'ask_me']
+const BOOKABLE_STATUSES = ['available', 'ask_me', 'not_set']
 
 export default function FloatingActionBar({ selectedSlots, onClear, onAction, mediatorId }) {
   const { isCRA } = useAuth()
