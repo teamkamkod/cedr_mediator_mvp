@@ -22,16 +22,33 @@ function consolidateSlotDays(slots) {
     }))
 }
 
-// Fetch first_name, last_name, email, role for the currently authenticated user
+// Fetch first_name, last_name, email, role for the currently authenticated user.
+// Never throws — returns null on any failure so it never blocks the calling mutation.
 async function getActingUser() {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const { data } = await supabase
-    .from('users')
-    .select('first_name, last_name, email, role')
-    .eq('id', user.id)
-    .single()
-  return data || null
+  try {
+    const { data } = await supabase.auth.getUser()
+    const user = data?.user
+    if (!user) return null
+    const { data: profile } = await supabase
+      .from('users')
+      .select('first_name, last_name, email, role')
+      .eq('id', user.id)
+      .single()
+    return profile || null
+  } catch {
+    return null
+  }
+}
+
+// Fire a Make webhook payload without ever blocking the calling mutation.
+async function fireWebhook(payload) {
+  try {
+    await fetch(MAKE_WEBHOOK, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    })
+  } catch { /* silent — webhook failure must never crash a booking action */ }
 }
 
 // Resolves slot data for a given date + period
@@ -265,26 +282,22 @@ export function useBatchPencilSlots() {
 
       const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
       const actingUser = await getActingUser()
-      await fetch(MAKE_WEBHOOK, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          event:                      'slot_pencilled',
-          mediator_id:                mediatorId,
-          hubspot_mediator_object_id: hubspotMediatorId || null,
-          group_id:                   groupId,
-          slots:                      consolidateSlotDays(slots),
-          pencilled_by: actingUser ? {
-            first_name: actingUser.first_name,
-            last_name:  actingUser.last_name,
-            email:      actingUser.email,
-          } : null,
-          case_id:                    caseData?.case_id     || null,
-          hubspot_record_id:          caseData?.record_id   || null,
-          hubspot_object_type:        caseData?.object_type || null,
-          record_name:                caseData?.record_name || null,
-        }),
-      }).catch(() => {})
+      await fireWebhook({
+        event:                      'slot_pencilled',
+        mediator_id:                mediatorId,
+        hubspot_mediator_object_id: hubspotMediatorId || null,
+        group_id:                   groupId,
+        slots:                      consolidateSlotDays(slots),
+        pencilled_by: actingUser ? {
+          first_name: actingUser.first_name,
+          last_name:  actingUser.last_name,
+          email:      actingUser.email,
+        } : null,
+        case_id:                    caseData?.case_id     || null,
+        hubspot_record_id:          caseData?.record_id   || null,
+        hubspot_object_type:        caseData?.object_type || null,
+        record_name:                caseData?.record_name || null,
+      })
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
@@ -330,25 +343,19 @@ export function useBatchCreateProvisionalBooking() {
         await deleteOtherCasePencils(caseData.case_id, null)
       }
 
-      const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
-      await fetch(MAKE_WEBHOOK, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          event:                      'request_slot_availability',
-          mediator_id:                mediatorId,
-          hubspot_mediator_object_id: hubspotMediatorId || null,
-          group_id:                   groupId,
-          slots:                      sorted.map(s => ({ date: s.dateStr, slot_time: s.period })),
-          slot_summary:               buildSlotSummary(sorted),
-          send_email:                 sendEmail,
-          message:                    message || null,
-          case_id:                    caseData?.case_id     || null,
-          hubspot_record_id:          caseData?.record_id   || null,
-          hubspot_object_type:        caseData?.object_type || null,
-          record_name:                caseData?.record_name || null,
-        }),
-      }).catch(() => {})
+      await fireWebhook({
+        event:                      'request_slot_availability',
+        mediator_id:                mediatorId,
+        hubspot_mediator_object_id: hubspotMediatorId || null,
+        group_id:                   groupId,
+        slots:                      consolidateSlotDays(slots),
+        send_email:                 sendEmail,
+        message:                    message || null,
+        case_id:                    caseData?.case_id     || null,
+        hubspot_record_id:          caseData?.record_id   || null,
+        hubspot_object_type:        caseData?.object_type || null,
+        record_name:                caseData?.record_name || null,
+      })
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
@@ -429,23 +436,19 @@ export function useCreateProvisionalBooking() {
         await deleteOtherCasePencils(caseData.case_id, null)
       }
 
-      await fetch(MAKE_WEBHOOK, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          event:                      'request_slot_availability',
-          mediator_id:                mediatorId,
-          hubspot_mediator_object_id: hubspotMediatorId || null,
-          slot_date:                  date,
-          slot_time:                  fullDay ? 'full_day' : period,
-          send_email:                 sendEmail,
-          message:                    message || null,
-          case_id:                    caseData?.case_id     || null,
-          hubspot_record_id:          caseData?.record_id   || null,
-          hubspot_object_type:        caseData?.object_type || null,
-          record_name:                caseData?.record_name || null,
-        }),
-      }).catch(() => {})
+      await fireWebhook({
+        event:                      'request_slot_availability',
+        mediator_id:                mediatorId,
+        hubspot_mediator_object_id: hubspotMediatorId || null,
+        slot_date:                  date,
+        slot_time:                  fullDay ? 'full_day' : period,
+        send_email:                 sendEmail,
+        message:                    message || null,
+        case_id:                    caseData?.case_id     || null,
+        hubspot_record_id:          caseData?.record_id   || null,
+        hubspot_object_type:        caseData?.object_type || null,
+        record_name:                caseData?.record_name || null,
+      })
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
@@ -577,25 +580,21 @@ export function usePencilSlot() {
       }
 
       const actingUser = await getActingUser()
-      await fetch(MAKE_WEBHOOK, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          event:                      'slot_pencilled',
-          mediator_id:                mediatorId,
-          hubspot_mediator_object_id: hubspotMediatorId || null,
-          slots:                      [{ date, slot_time: fullDay ? 'Full Day' : period === 'morning' ? 'Morning' : 'Afternoon' }],
-          pencilled_by: actingUser ? {
-            first_name: actingUser.first_name,
-            last_name:  actingUser.last_name,
-            email:      actingUser.email,
-          } : null,
-          case_id:                    caseData?.case_id     || null,
-          hubspot_record_id:          caseData?.record_id   || null,
-          hubspot_object_type:        caseData?.object_type || null,
-          record_name:                caseData?.record_name || null,
-        }),
-      }).catch(() => {})
+      await fireWebhook({
+        event:                      'slot_pencilled',
+        mediator_id:                mediatorId,
+        hubspot_mediator_object_id: hubspotMediatorId || null,
+        slots:                      [{ date, slot_time: fullDay ? 'Full Day' : period === 'morning' ? 'Morning' : 'Afternoon' }],
+        pencilled_by: actingUser ? {
+          first_name: actingUser.first_name,
+          last_name:  actingUser.last_name,
+          email:      actingUser.email,
+        } : null,
+        case_id:                    caseData?.case_id     || null,
+        hubspot_record_id:          caseData?.record_id   || null,
+        hubspot_object_type:        caseData?.object_type || null,
+        record_name:                caseData?.record_name || null,
+      })
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots', mediatorId] })
@@ -684,25 +683,19 @@ export function useRespondToBooking() {
 
       // One webhook per group, not per slot
       const actingUser = await getActingUser()
-      const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
-                      || 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
-      await fetch(webhookUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          event: action === 'accept'
-            ? 'provisional_booking_confirmed'
-            : 'provisional_booking_declined',
-          mediator_id: mediatorId,
-          actioned_by: actingUser ? {
-            first_name: actingUser.first_name,
-            last_name:  actingUser.last_name,
-            email:      actingUser.email,
-            role:       actingUser.role === 'mediator' ? 'Mediator' : 'Clerk',
-          } : null,
-          ...extraPayload,
-        }),
-      }).catch(() => {})
+      await fireWebhook({
+        event: action === 'accept'
+          ? 'provisional_booking_confirmed'
+          : 'provisional_booking_declined',
+        mediator_id: mediatorId,
+        actioned_by: actingUser ? {
+          first_name: actingUser.first_name,
+          last_name:  actingUser.last_name,
+          email:      actingUser.email,
+          role:       actingUser.role === 'mediator' ? 'Mediator' : 'Clerk',
+        } : null,
+        ...extraPayload,
+      })
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
