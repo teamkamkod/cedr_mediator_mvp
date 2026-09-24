@@ -1,7 +1,19 @@
 import { useState } from 'react'
 import { X, Bell, Check } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 
 const MAKE_WEBHOOK = 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
+
+async function getActingUser() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('users')
+    .select('first_name, last_name, email')
+    .eq('id', user.id)
+    .single()
+  return data || null
+}
 
 export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, mediatorId, onClose }) {
   const [state, setState] = useState('confirm')
@@ -10,6 +22,7 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
   async function handleConfirm() {
     setState('sending')
     try {
+      const requestedBy = await getActingUser()
       await fetch(MAKE_WEBHOOK, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -17,6 +30,11 @@ export default function RequestUpdateModal({ mediatorName, hubspotMediatorId, me
           event:                      'request_availability_update',
           mediator_id:                mediatorId,
           hubspot_mediator_object_id: hubspotMediatorId,
+          requested_by: requestedBy ? {
+            first_name: requestedBy.first_name,
+            last_name:  requestedBy.last_name,
+            email:      requestedBy.email,
+          } : null,
         }),
       })
       setState('sent')

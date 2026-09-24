@@ -3,6 +3,37 @@ import { supabase } from '../lib/supabase'
 import { differenceInCalendarWeeks, parseISO, getDay, getDate, format, subDays, eachDayOfInterval } from 'date-fns'
 import { buildSlotTimestamps } from '../lib/slotTime'
 
+// ─── Webhook helpers ──────────────────────────────────────────────────────────
+
+// Consolidate slot array by date: same-day AM+PM → { date, slot_time: 'full_day' }
+function consolidateSlotDays(slots) {
+  const byDate = {}
+  for (const { dateStr, period } of slots) {
+    if (!byDate[dateStr]) byDate[dateStr] = new Set()
+    byDate[dateStr].add(period)
+  }
+  return Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, periods]) => ({
+      date,
+      slot_time: (periods.has('morning') && periods.has('afternoon'))
+        ? 'full_day'
+        : periods.has('morning') ? 'morning' : 'afternoon',
+    }))
+}
+
+// Fetch first_name, last_name, email, role for the currently authenticated user
+async function getActingUser() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('users')
+    .select('first_name, last_name, email, role')
+    .eq('id', user.id)
+    .single()
+  return data || null
+}
+
 // Resolves slot data for a given date + period
 // Priority: explicit slot > recurring series > not_set
 export function resolveSlot(date, period, slots, series) {
@@ -233,6 +264,7 @@ export function useBatchPencilSlots() {
       )
 
       const sorted = [...slots].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+      const actingUser = await getActingUser()
       await fetch(MAKE_WEBHOOK, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -241,7 +273,12 @@ export function useBatchPencilSlots() {
           mediator_id:                mediatorId,
           hubspot_mediator_object_id: hubspotMediatorId || null,
           group_id:                   groupId,
-          slots:                      sorted.map(s => ({ date: s.dateStr, slot_time: s.period })),
+          slots:                      consolidateSlotDays(slots),
+          pencilled_by: actingUser ? {
+            first_name: actingUser.first_name,
+            last_name:  actingUser.last_name,
+            email:      actingUser.email,
+          } : null,
           case_id:                    caseData?.case_id     || null,
           hubspot_record_id:          caseData?.record_id   || null,
           hubspot_object_type:        caseData?.object_type || null,
@@ -539,6 +576,7 @@ export function usePencilSlot() {
         if (error) throw error
       }
 
+      const actingUser = await getActingUser()
       await fetch(MAKE_WEBHOOK, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -546,8 +584,12 @@ export function usePencilSlot() {
           event:                      'slot_pencilled',
           mediator_id:                mediatorId,
           hubspot_mediator_object_id: hubspotMediatorId || null,
-          slot_date:                  date,
-          slot_time:                  fullDay ? 'full_day' : period,
+          slots:                      [{ date, slot_time: fullDay ? 'full_day' : period }],
+          pencilled_by: actingUser ? {
+            first_name: actingUser.first_name,
+            last_name:  actingUser.last_name,
+            email:      actingUser.email,
+          } : null,
           case_id:                    caseData?.case_id     || null,
           hubspot_record_id:          caseData?.record_id   || null,
           hubspot_object_type:        caseData?.object_type || null,
@@ -636,6 +678,7 @@ export function useRespondToBooking() {
         if (error) throw error
       }
 
+      const actingUser = await getActingUser()
       const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
                       || 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
       if (webhookUrl) {
@@ -648,6 +691,12 @@ export function useRespondToBooking() {
                            : 'provisional_booking_declined',
             mediator_id: mediatorId,
             slot_id:     slotId,
+            actioned_by: actingUser ? {
+              first_name: actingUser.first_name,
+              last_name:  actingUser.last_name,
+              email:      actingUser.email,
+              role:       actingUser.role,
+            } : null,
             ...extraPayload,
           }),
         }).catch(() => {})
