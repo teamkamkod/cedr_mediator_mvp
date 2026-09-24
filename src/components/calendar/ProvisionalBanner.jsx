@@ -246,8 +246,11 @@ function DateRow({ d, caseGroup, mediatorId, hubspotMediatorId, respond }) {
   async function executeAccept() {
     const extraPayload = {
       hubspot_mediator_object_id: hubspotMediatorId || null,
-      slot_date:           d.date,
-      slot_time:           d.isFullDay ? 'full_day' : d.period,
+      slot_date: d.isMultiDay ? `${d.fromDate} to ${d.toDate}` : d.date,
+      slot_time: d.isMultiDay
+        ? `From ${format(parseISO(d.fromDate), 'd MMM')} to ${format(parseISO(d.toDate), 'd MMM')}`
+        : d.isFullDay ? 'Full Day'
+        : d.period === 'morning' ? 'Morning' : 'Afternoon',
       case_id:             d.case_id             || null,
       group_id:            d.group_id            || null,
       hubspot_record_id:   d.hubspot_record_id   || null,
@@ -273,8 +276,11 @@ function DateRow({ d, caseGroup, mediatorId, hubspotMediatorId, respond }) {
   async function executeDecline() {
     const extraPayload = {
       hubspot_mediator_object_id: hubspotMediatorId || null,
-      slot_date:  d.date,
-      slot_time:  d.isFullDay ? 'full_day' : d.period,
+      slot_date: d.isMultiDay ? `${d.fromDate} to ${d.toDate}` : d.date,
+      slot_time: d.isMultiDay
+        ? `From ${format(parseISO(d.fromDate), 'd MMM')} to ${format(parseISO(d.toDate), 'd MMM')}`
+        : d.isFullDay ? 'Full Day'
+        : d.period === 'morning' ? 'Morning' : 'Afternoon',
       case_id:    d.case_id || null,
       group_id:   d.group_id || null,
     }
