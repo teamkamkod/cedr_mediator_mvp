@@ -17,8 +17,8 @@ function consolidateSlotDays(slots) {
     .map(([date, periods]) => ({
       date,
       slot_time: (periods.has('morning') && periods.has('afternoon'))
-        ? 'full_day'
-        : periods.has('morning') ? 'morning' : 'afternoon',
+        ? 'Full Day'
+        : periods.has('morning') ? 'Morning' : 'Afternoon',
     }))
 }
 
@@ -584,7 +584,7 @@ export function usePencilSlot() {
           event:                      'slot_pencilled',
           mediator_id:                mediatorId,
           hubspot_mediator_object_id: hubspotMediatorId || null,
-          slots:                      [{ date, slot_time: fullDay ? 'full_day' : period }],
+          slots:                      [{ date, slot_time: fullDay ? 'Full Day' : period === 'morning' ? 'Morning' : 'Afternoon' }],
           pencilled_by: actingUser ? {
             first_name: actingUser.first_name,
             last_name:  actingUser.last_name,
@@ -695,7 +695,7 @@ export function useRespondToBooking() {
               first_name: actingUser.first_name,
               last_name:  actingUser.last_name,
               email:      actingUser.email,
-              role:       actingUser.role,
+              role:       actingUser.role === 'mediator' ? 'Mediator' : 'Clerk',
             } : null,
             ...extraPayload,
           }),
