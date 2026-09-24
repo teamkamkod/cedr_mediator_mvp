@@ -255,11 +255,12 @@ function DateRow({ d, caseGroup, mediatorId, hubspotMediatorId, respond }) {
       record_name:         d.record_name         || null,
     }
     try {
-      await Promise.all(
-        d.slots.map(slot =>
-          respond.mutateAsync({ slotId: slot.id, mediatorId, action: 'accept', extraPayload })
-        )
-      )
+      await respond.mutateAsync({
+        slotIds: d.slots.map(s => s.id),
+        mediatorId,
+        action: 'accept',
+        extraPayload,
+      })
       setShowAcceptModal(false)
     } catch (err) {
       if (err?.message === 'CASE_CONFLICT') {
@@ -278,11 +279,12 @@ function DateRow({ d, caseGroup, mediatorId, hubspotMediatorId, respond }) {
       group_id:   d.group_id || null,
     }
     try {
-      await Promise.all(
-        d.slots.map(slot =>
-          respond.mutateAsync({ slotId: slot.id, mediatorId, action: 'decline', extraPayload })
-        )
-      )
+      await respond.mutateAsync({
+        slotIds: d.slots.map(s => s.id),
+        mediatorId,
+        action: 'decline',
+        extraPayload,
+      })
       setConfirming(null)
     } catch { setConfirming(null) }
   }

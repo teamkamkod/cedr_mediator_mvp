@@ -650,57 +650,59 @@ export function useDeactivateSeriesFrom() {
 export function useRespondToBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ slotId, mediatorId, action, extraPayload = {} }) => {
+    // slotIds: string[] — all slots in the group; single webhook fired once after all DB ops
+    mutationFn: async ({ slotIds, mediatorId, action, extraPayload = {} }) => {
+      const caseId  = extraPayload?.case_id  || null
+      const groupId = extraPayload?.group_id || null
+
       if (action === 'accept') {
-        // Conflict check: block if case already has provisionally_booked or confirmed
-        const caseId   = extraPayload?.case_id
-        const groupId  = extraPayload?.group_id || null
+        // Conflict check once for the whole group
         const conflict = await checkCaseConflict(caseId, groupId)
         if (conflict) throw new Error('CASE_CONFLICT')
 
-        // pencilled → provisionally_booked
-        const { error } = await supabase
-          .from('availability_slots')
-          .update({ status: 'provisionally_booked' })
-          .eq('id', slotId)
-        if (error) throw error
-
-        // Remove all other pencilled slots for this case (other dates/groups no longer relevant)
-        if (caseId) {
-          await deleteOtherCasePencils(caseId, groupId || null)
+        // pencilled → provisionally_booked for every slot in the group
+        for (const slotId of slotIds) {
+          const { error } = await supabase
+            .from('availability_slots')
+            .update({ status: 'provisionally_booked' })
+            .eq('id', slotId)
+          if (error) throw error
         }
+
+        // Remove all other pencilled slots for this case
+        if (caseId) await deleteOtherCasePencils(caseId, groupId)
       } else {
-        // decline → delete
-        const { error } = await supabase
-          .from('availability_slots')
-          .delete()
-          .eq('id', slotId)
-        if (error) throw error
+        // decline → delete every slot in the group
+        for (const slotId of slotIds) {
+          const { error } = await supabase
+            .from('availability_slots')
+            .delete()
+            .eq('id', slotId)
+          if (error) throw error
+        }
       }
 
+      // One webhook per group, not per slot
       const actingUser = await getActingUser()
       const webhookUrl = import.meta.env.VITE_MAKE_BOOKING_WEBHOOK
                       || 'https://hook.eu1.make.com/2hgf5r8zc3n18tkewgn7emsg02zl46sp'
-      if (webhookUrl) {
-        await fetch(webhookUrl, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            event:       action === 'accept'
-                           ? 'provisional_booking_confirmed'
-                           : 'provisional_booking_declined',
-            mediator_id: mediatorId,
-            slot_id:     slotId,
-            actioned_by: actingUser ? {
-              first_name: actingUser.first_name,
-              last_name:  actingUser.last_name,
-              email:      actingUser.email,
-              role:       actingUser.role === 'mediator' ? 'Mediator' : 'Clerk',
-            } : null,
-            ...extraPayload,
-          }),
-        }).catch(() => {})
-      }
+      await fetch(webhookUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          event: action === 'accept'
+            ? 'provisional_booking_confirmed'
+            : 'provisional_booking_declined',
+          mediator_id: mediatorId,
+          actioned_by: actingUser ? {
+            first_name: actingUser.first_name,
+            last_name:  actingUser.last_name,
+            email:      actingUser.email,
+            role:       actingUser.role === 'mediator' ? 'Mediator' : 'Clerk',
+          } : null,
+          ...extraPayload,
+        }),
+      }).catch(() => {})
     },
     onSuccess: (_, { mediatorId }) => {
       qc.invalidateQueries({ queryKey: ['slots',       mediatorId] })
